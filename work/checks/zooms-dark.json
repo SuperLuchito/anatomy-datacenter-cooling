@@ -1,0 +1,83 @@
+[
+ [
+  "wait",
+  900
+ ],
+ [
+  "key",
+  " ",
+  ".dc-viewport"
+ ],
+ [
+  "shot",
+  "shots/zoom/dark-z01-crac-upper.png",
+  ".dc-card .iso-plate",
+  4,
+  [
+   318,
+   268,
+   100,
+   70
+  ]
+ ],
+ [
+  "shot",
+  "shots/zoom/dark-z02-crac-lower.png",
+  ".dc-card .iso-plate",
+  4,
+  [
+   335,
+   330,
+   80,
+   70
+  ]
+ ],
+ [
+  "shot",
+  "shots/zoom/dark-z05-under-crac.png",
+  ".dc-card .iso-plate",
+  4,
+  [
+   330,
+   355,
+   100,
+   60
+  ]
+ ],
+ [
+  "shot",
+  "shots/zoom/dark-z07-pump.png",
+  ".dc-card .iso-plate",
+  4,
+  [
+   440,
+   375,
+   70,
+   70
+  ]
+ ],
+ [
+  "shot",
+  "shots/zoom/dark-z09-dry-headers.png",
+  ".dc-card .iso-plate",
+  4,
+  [
+   530,
+   380,
+   70,
+   70
+  ]
+ ],
+ [
+  "shot",
+  "shots/zoom/dark-z10-dry-fan.png",
+  ".dc-card .iso-plate",
+  4,
+  [
+   565,
+   355,
+   115,
+   65
+  ]
+ ]
+]

@@ -1,0 +1,13 @@
+[
+  ["wait", 1500],
+  ["eval", "new Promise((done) => { const a = window.__dcFrames; const dot = document.querySelector('.mk[data-kind=air] circle:not([visibility])'); const p0 = dot.getAttribute('cx') + ',' + dot.getAttribute('cy'); setTimeout(() => done('reduced: кадров за 1,5 с: ' + (window.__dcFrames - a) + ' · маркер ' + p0 + ' → ' + dot.getAttribute('cx') + ',' + dot.getAttribute('cy') + ' · data-still=' + document.querySelector('.dc-stage').hasAttribute('data-still')), 1500); })"],
+  ["click", "[data-act='tour']"],
+  ["eval", "'reduced: автопоказ aria-pressed=' + document.querySelector('[data-act=tour]').getAttribute('aria-pressed')"],
+  ["click", "[data-preset='35']"],
+  ["eval", "'reduced: пресет сразу: ' + document.querySelector('[data-v=mode]').textContent + ' · ' + document.querySelector('[data-readout]').textContent"],
+  ["key", "4", ".dc-viewport"],
+  ["eval", "'reduced: шаг вручную: ' + document.querySelector('[data-v=stepTitle]').textContent"],
+  ["wait", 21000],
+  ["eval", "'reduced: через 21 с бездействия шаг: ' + document.querySelector('[data-v=stepTitle]').textContent + ' · показ ' + document.querySelector('[data-act=tour]').getAttribute('aria-pressed')"],
+  ["shot", "shots/reduced.png", ".dc-card .iso-plate", 2]
+]

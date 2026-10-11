@@ -1,0 +1,191 @@
+[
+ [
+  "wait",
+  900
+ ],
+ [
+  "key",
+  " ",
+  ".dc-viewport"
+ ],
+ [
+  "shot",
+  "shots/zoom/z01-crac-upper.png",
+  ".dc-card .iso-plate",
+  4,
+  [
+   318,
+   268,
+   100,
+   70
+  ]
+ ],
+ [
+  "shot",
+  "shots/zoom/z02-crac-lower.png",
+  ".dc-card .iso-plate",
+  4,
+  [
+   335,
+   330,
+   80,
+   70
+  ]
+ ],
+ [
+  "shot",
+  "shots/zoom/z03-crac-fan.png",
+  ".dc-card .iso-plate",
+  4,
+  [
+   280,
+   300,
+   70,
+   60
+  ]
+ ],
+ [
+  "shot",
+  "shots/zoom/z04-crac-top.png",
+  ".dc-card .iso-plate",
+  4,
+  [
+   270,
+   225,
+   110,
+   70
+  ]
+ ],
+ [
+  "shot",
+  "shots/zoom/z05-under-crac.png",
+  ".dc-card .iso-plate",
+  4,
+  [
+   330,
+   355,
+   100,
+   60
+  ]
+ ],
+ [
+  "shot",
+  "shots/zoom/z06-supports-floor-end.png",
+  ".dc-card .iso-plate",
+  4,
+  [
+   395,
+   360,
+   80,
+   70
+  ]
+ ],
+ [
+  "shot",
+  "shots/zoom/z07-pump.png",
+  ".dc-card .iso-plate",
+  4,
+  [
+   440,
+   375,
+   70,
+   70
+  ]
+ ],
+ [
+  "shot",
+  "shots/zoom/z08-high-support.png",
+  ".dc-card .iso-plate",
+  4,
+  [
+   480,
+   370,
+   70,
+   50
+  ]
+ ],
+ [
+  "shot",
+  "shots/zoom/z09-dry-headers.png",
+  ".dc-card .iso-plate",
+  4,
+  [
+   530,
+   380,
+   70,
+   70
+  ]
+ ],
+ [
+  "shot",
+  "shots/zoom/z10-dry-fan.png",
+  ".dc-card .iso-plate",
+  4,
+  [
+   565,
+   355,
+   115,
+   65
+  ]
+ ],
+ [
+  "shot",
+  "shots/zoom/z11-dry-legs-ebox.png",
+  ".dc-card .iso-plate",
+  4,
+  [
+   620,
+   400,
+   140,
+   80
+  ]
+ ],
+ [
+  "shot",
+  "shots/zoom/z12-servers.png",
+  ".dc-card .iso-plate",
+  4,
+  [
+   165,
+   120,
+   80,
+   60
+  ]
+ ],
+ [
+  "shot",
+  "shots/zoom/z13-rack-tiles.png",
+  ".dc-card .iso-plate",
+  4,
+  [
+   200,
+   220,
+   110,
+   80
+  ]
+ ],
+ [
+  "shot",
+  "shots/zoom/z14-strip.png",
+  ".dc-card .iso-plate",
+  4,
+  [
+   90,
+   260,
+   110,
+   70
+  ]
+ ],
+ [
+  "shot",
+  "shots/zoom/z15-rack-side.png",
+  ".dc-card .iso-plate",
+  4,
+  [
+   240,
+   140,
+   90,
+   70
+  ]
+ ]
+]

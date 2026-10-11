@@ -1,0 +1,7 @@
+[
+  ["wait", 800],
+  ["eval", "window.__clicks = []; document.addEventListener('click', (e) => window.__clicks.push(e.target.tagName + ':' + (e.target.closest('.it')?.dataset.name ?? e.target.className?.baseVal ?? '')), true); 'ok'"],
+  ["click", ".it[data-name='rack2.srv4']"],
+  ["eval", "'clicks ' + JSON.stringify(window.__clicks) + ' title ' + document.querySelector('[data-v=stepTitle]').textContent"],
+  ["eval", "(() => { const el = document.querySelector('.it[data-name=\"rack3.post#3\"]'); el.querySelector('path').dispatchEvent(new MouseEvent('click', { bubbles: true })); return 'synthetic: ' + document.querySelector('[data-v=stepTitle]').textContent; })()"]
+]

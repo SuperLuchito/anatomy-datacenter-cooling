@@ -1,0 +1,18 @@
+[
+ [
+  "wait",
+  1000
+ ],
+ [
+  "eval",
+  "new Promise((done) => { const a = window.__dcFrames; setTimeout(() => done('на экране: кадров за 1 с: ' + (window.__dcFrames - a)), 1000); })"
+ ],
+ [
+  "eval",
+  "new Promise((done) => { window.scrollTo(0, document.body.scrollHeight); setTimeout(() => { const r = document.querySelector('.dc-stage').getBoundingClientRect(); const a = window.__dcFrames; setTimeout(() => done('вне экрана (низ сцены ' + Math.round(r.bottom) + ' px): кадров за 1 с: ' + (window.__dcFrames - a)), 1000); }, 600); })"
+ ],
+ [
+  "eval",
+  "new Promise((done) => { window.scrollTo(0, 0); setTimeout(() => { const a = window.__dcFrames; setTimeout(() => done('снова на экране: кадров за 1 с: ' + (window.__dcFrames - a)), 1000); }, 600); })"
+ ]
+]

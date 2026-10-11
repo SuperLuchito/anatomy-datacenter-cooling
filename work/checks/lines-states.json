@@ -1,0 +1,1 @@
+[["wait", 800], ["key", "2", ".dc-viewport"], ["lines", "shots/lines-step2.png", ".dc-card .iso-plate"], ["key", "5", ".dc-viewport"], ["lines", "shots/lines-step5.png", ".dc-card .iso-plate"], ["click", "[data-preset='-10']"], ["wait", 2000], ["key", "4", ".dc-viewport"], ["lines", "shots/lines-free.png", ".dc-card .iso-plate"]]
