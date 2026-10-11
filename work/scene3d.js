@@ -1370,6 +1370,12 @@ void main(){vId=aMeta.w;gl_Position=clipOf(turn(aPos,aMeta.y)+offsetOf(aMove,aMe
     st,
     colors: () => COL,
     readTokens,
+    // смена темы страницы: тона кита и чернила воздуха перечитываются, кадр рисуется заново
+    setTheme(next) {
+      theme = next;
+      readTokens();
+      depthKey = "";
+    },
     draw,
     pick,
     project,

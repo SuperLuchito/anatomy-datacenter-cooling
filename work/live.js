@@ -150,6 +150,11 @@ if (scene) {
   pageRoot.setAttribute("data-3d", "");
 }
 window.__dc3d = scene;
+// тема артефакта меняется у зрителя на лету: SVG следует за токенами сам, 3D-сцене нужно перечитать цвета
+window.addEventListener("dc-theme", (event) => {
+  scene?.setTheme(event.detail);
+  redraw();
+});
 function leave3d() {
   scene = null;
   stage.removeAttribute("data-3d");

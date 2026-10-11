@@ -1651,5 +1651,47 @@ mkdirSync(join(HERE, "..", "outputs"), { recursive: true });
 mkdirSync(join(HERE, "shots"), { recursive: true });
 const out = DARK ? join(HERE, "shots", "dark.html") : join(HERE, "..", "outputs", "data-center-cooling.html");
 writeFileSync(out, page);
+
+// --artifact <путь>: та же страница для публикации артефактом. Каркас документа добавляет площадка, поэтому
+// здесь только заголовок, стили и содержимое; тема следует за выбором зрителя (data-theme на корне или
+// prefers-color-scheme) и переключается на лету, без перезагрузки.
+const ARTIFACT = process.argv.indexOf("--artifact");
+if (ARTIFACT > 0) {
+  const target = process.argv[ARTIFACT + 1];
+  const pageCss = CSS.replace("html{color-scheme:light}", "").replace("body{margin:0;background:var(--anatomy-page);", ".dc-root{margin:0;min-height:100%;background:var(--anatomy-page);");
+  const groundCss = `:root{--dc-ground:#f3efe6;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--dc-ground:#0b0b0b;color-scheme:dark}}
+:root[data-theme="dark"]{--dc-ground:#0b0b0b;color-scheme:dark}
+body{background:var(--dc-ground)}`;
+  const themeScript = `(() => {
+  const root = document.documentElement;
+  const el = document.querySelector(".dc-root");
+  const media = matchMedia("(prefers-color-scheme: dark)");
+  const pick = () => (root.dataset.theme === "dark" || (root.dataset.theme !== "light" && media.matches) ? "dark" : "light");
+  el.dataset.theme = pick();
+  const update = () => {
+    const theme = pick();
+    if (el.dataset.theme === theme) return;
+    el.dataset.theme = theme;
+    window.dispatchEvent(new CustomEvent("dc-theme", { detail: theme }));
+  };
+  media.addEventListener?.("change", update);
+  new MutationObserver(update).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+})();`;
+  const artifact = `<title>Как ЦОД отдаёт тепло</title>
+<!--
+Рисунок построен с использованием Anatomy (https://github.com/wheresryan22/anatomy, коммит dbf697a).
+Часть кода и стилей кита (ISO_CSS, геометрия солидов, труб и аудит) распространяется по лицензии:
+
+${LICENSE}
+-->
+<style>${k.ISO_CSS}${pageCss}
+${groundCss}</style>
+<div class="iso dc-root" data-theme="light" lang="ru">${BODY}</div>
+<script>${themeScript}</script>
+<script type="module">${(glScript() + "\n" + SCENE3D_JS + "\n" + MODEL + "\n" + LIVE).replace(/<\/(script)/gi, "<\\/$1")}</script>`;
+  writeFileSync(target, artifact);
+  console.log("wrote artifact", target, `${(artifact.length / 1024).toFixed(0)} KB`);
+}
 console.log("wrote", out, `${(page.length / 1024).toFixed(0)} KB`, `${R.items.length} items`, `scale ${KS.toFixed(3)}`);
 A.auditOrExit(R, P, {});

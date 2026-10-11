@@ -1964,6 +1964,12 @@ void main(){vId=aMeta.w;gl_Position=clipOf(turn(aPos,aMeta.y)+offsetOf(aMove,aMe
     st,
     colors: () => COL,
     readTokens,
+    // смена темы страницы: тона кита и чернила воздуха перечитываются, кадр рисуется заново
+    setTheme(next) {
+      theme = next;
+      readTokens();
+      depthKey = "";
+    },
     draw,
     pick,
     project,
@@ -2227,6 +2233,11 @@ if (scene) {
   pageRoot.setAttribute("data-3d", "");
 }
 window.__dc3d = scene;
+// тема артефакта меняется у зрителя на лету: SVG следует за токенами сам, 3D-сцене нужно перечитать цвета
+window.addEventListener("dc-theme", (event) => {
+  scene?.setTheme(event.detail);
+  redraw();
+});
 function leave3d() {
   scene = null;
   stage.removeAttribute("data-3d");
