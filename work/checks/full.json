@@ -1,0 +1,16 @@
+[
+  ["wait", 6000],
+  ["click", "[data-act=\"full-icon\"]"],
+  ["wait", 1500],
+  ["eval", "JSON.stringify({full: document.querySelector('.dc-layout').hasAttribute('data-full'), native: !!document.fullscreenElement, canvas: [document.querySelector('.dc-view3d').width, document.querySelector('.dc-view3d').height], frame: window.__dc3d && window.__dc3d.frame(), pressed: document.querySelector('[data-act=full]').getAttribute('aria-pressed')})"],
+  ["shot", "shots/3d/full.png", ".dc-layout", 1],
+  ["drag", ".dc-viewport", 0.5, 0.5, 0.62, 0.45],
+  ["wait", 800],
+  ["shot", "shots/3d/full-turn.png", ".dc-layout", 1],
+  ["key", "Escape", ".dc-viewport"],
+  ["wait", 800],
+  ["eval", "JSON.stringify({full: document.querySelector('.dc-layout').hasAttribute('data-full'), canvas: [document.querySelector('.dc-view3d').width, document.querySelector('.dc-view3d').height], frame: window.__dc3d && window.__dc3d.frame()})"],
+  ["key", "f", ".dc-viewport", "KeyF"],
+  ["wait", 800],
+  ["eval", "document.querySelector('.dc-layout').hasAttribute('data-full')"]
+]

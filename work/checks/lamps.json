@@ -1,0 +1,12 @@
+[
+  ["wait", 6000],
+  ["click", "[data-preset=\"20\"]"],
+  ["wait", 3000],
+  ["shot", "shots/3d/lamps-ctrl.png", ".dc-card .iso-plate", 6, [345, 268, 60, 40]],
+  ["click", "[data-preset=\"-10\"]"],
+  ["wait", 3000],
+  ["shot", "shots/3d/lamps-ctrl-free.png", ".dc-card .iso-plate", 6, [345, 268, 60, 40]],
+  ["click", "[data-preset=\"35\"]"],
+  ["wait", 3000],
+  ["shot", "shots/3d/lamps-ctrl-comp.png", ".dc-card .iso-plate", 6, [345, 268, 60, 40]]
+]

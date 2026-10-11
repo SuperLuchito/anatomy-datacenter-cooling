@@ -1,0 +1,8 @@
+[
+  ["wait", 7000],
+  ["key", " ", ".dc-viewport"],
+  ["wait", 500],
+  ["shot", "shots/3d/new-page.png", ".dc-card .iso-plate", 1],
+  ["shot", "shots/3d/new-hyd.png", ".dc-card .iso-plate", 1, [430, 330, 260, 170]],
+  ["shot", "shots/3d/new-crac.png", ".dc-card .iso-plate", 1, [250, 150, 220, 250]]
+]

@@ -175,6 +175,13 @@ function airTargets(m) {
   return [f[0], (0.35 + 0.65 * Math.min(1, m.qIT / 80)) * f[1], Math.min(1, m.fan) * f[2], Math.min(1, m.fan) * (0.45 + 0.55 * Math.min(1, m.qOut / 107)) * f[3]];
 }
 
+// Температуры воздуха для цвета потоков. Воздух за драйкулером в балансе модели не участвует:
+// его нагрев считается по тому же отводу тепла при условном расходе воздуха 10 кВт/К на полной скорости вентиляторов.
+function airTemps(m) {
+  const rise = m.qOut / (10 * Math.max(0.15, m.fan));
+  return { s: m.tSupply, r: m.tReturn, b: m.tBetween, o: m.tOutdoor, e: Math.min(m.tOutdoor + rise, m.tHot - 0.5) };
+}
+
 // ── камера: показываемый вид догоняет цель; перетаскивание двигает оба сразу ──
 const VIEW_REST = { az: 58, el: 30, zoom: 1 };
 const EL_RANGE = [6, 80];
@@ -309,6 +316,45 @@ function marks3d(fade) {
   }
   return list;
 }
+// Индикаторы: питание и активность серверов (мигает чаще с нагрузкой), лампы контроллера
+// (питание, фрикулинг, компрессор, насос) и полосы на его экране: доля фрикулинга, доля компрессора, скорость вентиляторов драйкулера.
+const LAMPS = DATA.lamps;
+const LED = { green: [0.16, 0.7, 0.34], amber: [0.96, 0.6, 0.12], blue: [0.2, 0.52, 0.95], dim: [0.62, 0.64, 0.66] };
+const blink = (x) => {
+  const v = Math.sin(x * 127.1 + 311.7) * 43758.5453;
+  return v - Math.floor(v);
+};
+function lamps3d(fade) {
+  if (fade < 0.02 || !LAMPS) return [];
+  const list = [];
+  const put = (at, rgb, a, size = 1.25) => {
+    if (a > 0.02) list.push({ at, normal: [0, 1, 0], lift: 0.35, tangent: [0, 0, 1], color: [...rgb, Math.min(1, a) * fade], size, led: true });
+  };
+  const load = clampTo(model.qIT / 80, 0, 1);
+  LAMPS.servers.forEach(([power, act], i) => {
+    put(power, LED.green, 1);
+    const tick = Math.floor(airClock * (4 + (i % 5)) + i * 0.37);
+    put(act, LED.amber, blink(i * 7.31 + tick) < 0.2 + 0.7 * load ? 1 : 0);
+  });
+  const [power, fc, dx, pump] = LAMPS.ctrl;
+  put(power, LED.green, 1);
+  put(fc, LED.blue, smooth01(model.qFC / 2));
+  put(dx, LED.amber, smooth01(model.qDX / 2));
+  put(pump, LED.green, 1);
+  const rows = [
+    [clampTo(model.shareFC, 0, 1), LED.blue],
+    [clampTo(model.shareDX, 0, 1), LED.amber],
+    [clampTo(model.fan, 0, 1), LED.green],
+  ];
+  LAMPS.screen.forEach((cells, row) => {
+    const [share, rgb] = rows[row];
+    cells.forEach((at, i) => {
+      const lit = clampTo(share * cells.length - i, 0, 1);
+      put(at, lit > 0 ? rgb : LED.dim, lit > 0 ? 0.35 + 0.65 * lit : 0.5, 0.95);
+    });
+  });
+  return list;
+}
 let wheelAngle = 0;
 function draw3d() {
   if (!scene) return;
@@ -324,9 +370,11 @@ function draw3d() {
   st.step = state.step;
   const fade = 1 - smooth01(explodeAmount() / 0.18);
   st.air.levels = airLevel.map((env) => Math.max(0, env.x) * fade);
+  st.shadow = fade;
   st.air.phase = airPhase;
   st.air.time = airClock;
-  scene.setMarks(marks3d(fade));
+  st.air.temps = airTemps(model);
+  scene.setMarks([...marks3d(fade), ...lamps3d(fade)]);
   scene.draw();
 }
 describeView();
@@ -619,7 +667,8 @@ function setZoom(zoom) {
   if (scene) {
     // 3D: масштаб камеры вокруг центра холста, без CSS-преобразования
     const from = viewTarget.zoom;
-    const centre = [DATA.scene.camera.view[0] / 2, DATA.scene.camera.view[1] / 2];
+    const frame = scene.frame();
+    const centre = [frame.w / 2, frame.h / 2];
     const rest = scene.project(DATA.scene.centre);
     const o = [rest[0], rest[1]];
     if (zoom === 1) viewTarget.pan = [0, 0];
@@ -741,6 +790,50 @@ ui3d.right?.addEventListener("click", () => {
   turnView(30);
 });
 
+// Полный экран: раскладка с рисунком и панелью уходит во весь экран через Fullscreen API;
+// где API нет или запрос отклонён (iPhone, встроенные окна), остаётся та же раскладка поверх страницы.
+const layout = $(".dc-layout");
+const fullButtons = $$("[data-act='full'], [data-act='full-icon']");
+const isFull = () => layout.hasAttribute("data-full");
+const nativeFull = () => document.fullscreenElement ?? document.webkitFullscreenElement ?? null;
+function setFull(on) {
+  if (on === isFull()) return;
+  layout.toggleAttribute("data-full", on);
+  document.documentElement.toggleAttribute("data-dc-full", on);
+  if (on) {
+    const request = layout.requestFullscreen ?? layout.webkitRequestFullscreen;
+    try {
+      const result = request?.call(layout);
+      result?.catch?.(() => {});
+    } catch {
+      // остаётся раскладка поверх страницы
+    }
+  } else if (nativeFull() === layout) {
+    (document.exitFullscreen ?? document.webkitExitFullscreen)?.call(document)?.catch?.(() => {});
+  }
+  for (const button of fullButtons) {
+    button.setAttribute("aria-pressed", String(on));
+    const label = on ? "Выйти из полного экрана" : "Во весь экран";
+    if (button.dataset.act === "full") setText(button, label);
+    else button.setAttribute("aria-label", `${label} (F)`), (button.title = `${label} (F)`);
+  }
+  announce(on ? "Рисунок во весь экран" : "Обычный вид страницы");
+  requestAnimationFrame(() => {
+    applyPan();
+    redraw();
+  });
+}
+for (const button of fullButtons)
+  button.addEventListener("click", () => {
+    touched();
+    setFull(!isFull());
+  });
+for (const type of ["fullscreenchange", "webkitfullscreenchange"])
+  document.addEventListener(type, () => {
+    if (!nativeFull() && isFull()) setFull(false);
+    else redraw();
+  });
+
 // нажатие на узел рисунка и перетаскивание увеличенной сцены
 let drag = null;
 viewport.addEventListener("pointerdown", (event) => {
@@ -767,7 +860,7 @@ viewport.addEventListener("pointermove", (event) => {
   }
   if (drag.moved && scene) {
     const box = viewport.getBoundingClientRect();
-    const toVb = DATA.scene.camera.view[0] / box.width;
+    const toVb = scene.frame().w / box.width;
     if (drag.shift) viewTarget.pan = [drag.pan[0] + dx * toVb, drag.pan[1] + dy * toVb];
     else {
       viewTarget.az = drag.az - dx * 0.4;
@@ -842,11 +935,20 @@ document.addEventListener("keydown", (event) => {
     else turnView(event.code === "KeyQ" ? -15 : event.code === "KeyE" ? 15 : 0, event.code === "KeyW" ? 8 : event.code === "KeyS" ? -8 : 0);
     return;
   }
+  if (event.code === "KeyF" && !isRange) {
+    event.preventDefault();
+    touched();
+    setFull(!isFull());
+    return;
+  }
   if (event.key === "Escape") {
     if (state.zoom !== 1) {
       event.preventDefault();
       touched();
       setZoom(1);
+    } else if (isFull()) {
+      event.preventDefault();
+      setFull(false);
     }
     return;
   }

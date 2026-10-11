@@ -1,7 +1,27 @@
 [
-  ["wait", 2000],
-  ["click", "[data-act='tour']"],
-  ["eval", "'показ: ' + document.querySelector('[data-act=tour]').getAttribute('aria-pressed') + ' · ' + document.querySelector('[data-v=stepTitle]').textContent"],
-  ["until", "document.querySelector('[data-v=stepTitle]').textContent.startsWith('2.')", 40000],
-  ["eval", "'показ дошёл до: ' + document.querySelector('[data-v=stepTitle]').textContent"]
+ [
+  "wait",
+  2000
+ ],
+ [
+  "scroll",
+  "[data-act='tour']"
+ ],
+ [
+  "click",
+  "[data-act='tour']"
+ ],
+ [
+  "eval",
+  "'показ: ' + document.querySelector('[data-act=tour]').getAttribute('aria-pressed') + ' · ' + document.querySelector('[data-v=stepTitle]').textContent"
+ ],
+ [
+  "until",
+  "document.querySelector('[data-v=stepTitle]').textContent.startsWith('2.')",
+  40000
+ ],
+ [
+  "eval",
+  "'показ дошёл до: ' + document.querySelector('[data-v=stepTitle]').textContent"
+ ]
 ]

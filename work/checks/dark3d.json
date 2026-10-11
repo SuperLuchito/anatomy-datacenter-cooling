@@ -1,0 +1,5 @@
+[
+  ["wait", 6000],
+  ["shot", "shots/3d/dark.png", ".dc-card .iso-plate", 1],
+  ["shot", "shots/3d/dark-crac.png", ".dc-card .iso-plate", 2, [150, 90, 330, 300]]
+]

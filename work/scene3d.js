@@ -20,9 +20,15 @@ function createScene3D(canvas, D, { steps, air, theme, onLost } = {}) {
   };
   const W = D.camera.view ? D.camera.view[0] : 900;
   const H = D.camera.view ? D.camera.view[1] : 560;
+  const view = { w: W, h: H, ox: 0, oy: 0 };
 
   // ── атрибуты детали: смещение разборки, узел, вращение, маска шагов ──
   const SPIN = new Map();
+  const POROUS = /^(crac\.coil\.(fc|dx)|crac\.filter|crac\.fan\.wheel|dry\.coil)$/;
+  const COPPER = /^(ref\.|crac\.drier$|crac\.comp\.(dis|suc)$)/;
+  const BRASS = /^(glycol\.valve\.(in|out)$|glycol\.strainer$|glycol\.vent$|glycol\.relief$|crac\.txv$|crac\.sight$)/;
+  // рамки деталей для контактных теней
+  const BOXES = new Map();
   D.blades.forEach((fan, i) => SPIN.set(fan.item, i + 1));
   if (D.wheel.item >= 0) SPIN.set(D.wheel.item, 3);
   const maskOf = (item) => {
@@ -31,6 +37,11 @@ function createScene3D(canvas, D, { steps, air, theme, onLost } = {}) {
       if (step.groups.includes(item.g) || step.names.includes(item.n)) mask += 2 ** i;
     });
     if (item.lit) mask += 32;
+    // проницаемые для воздуха детали: рёбра теплообменников, фильтр, крыльчатка; поток за ними виден наполовину
+    if (POROUS.test(item.n)) mask += 128;
+    // материал: медь у линий хладагента, латунь у арматуры (оттенок поверх серой шкалы рисунка)
+    if (COPPER.test(item.n)) mask += 256;
+    else if (BRASS.test(item.n)) mask += 512;
     return mask;
   };
   const META = D.items.map((item, index) => ({ move: [...item.m, item.w], meta: [item.u, 0, maskOf(item), index] }));
@@ -54,7 +65,10 @@ function createScene3D(canvas, D, { steps, air, theme, onLost } = {}) {
     if (fb.n + verts.length > LIMIT) newFaceBatch();
     const base = fb.n;
     const meta = [cur.meta[0], cur.spin, cur.meta[2] + (cur.dark ? 64 : 0), cur.meta[3]];
+    let bx = BOXES.get(cur.meta[3]);
+    if (!bx) BOXES.set(cur.meta[3], (bx = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity]));
     for (const [p, n] of verts) {
+      for (let k = 0; k < 3; k++) (bx[k] = Math.min(bx[k], p[k])), (bx[k + 3] = Math.max(bx[k + 3], p[k]));
       fb.pos.push(p[0], p[1], p[2]);
       fb.nor.push(n[0], n[1], n[2]);
       fb.move.push(...cur.move);
@@ -463,6 +477,38 @@ function createScene3D(canvas, D, { steps, air, theme, onLost } = {}) {
     body([fan.c[0], fan.c[1], 0, 0, 0, 1, 1, 0, 0, 0, 1, 0], [fan.deck + 0.02, 0, fan.deck + 0.02, fan.rIn - 0.05, fan.deck + 0.12, fan.rIn - 0.05, fan.deck + 0.12, 0]);
   });
 
+  // Контактные тени: мягкие прямоугольники на опорной плоскости под опорами узлов (по рамкам их деталей).
+  // Опоры одного узла (ножки драйкулера, рама кондиционера) сливаются в одну тень, как от тела над ними.
+  const SHADOW_CASTERS = [
+    [/^rack\d\.foot/, true, 1],
+    [/^crac\.base/, true, 1],
+    [/^pump\.plinth$/, false, 1],
+    [/^dry\.foot/, true, 0.45],
+    [/^glycol\.tank\.foot$/, false, 1],
+    [/^glycol\.support\.\w+\.plate$/, false, 0.8],
+    [/^duct\.post\.plate/, false, 0.8],
+  ];
+  const shadows = [];
+  for (const [re, merge, k] of SHADOW_CASTERS) {
+    const found = [];
+    D.items.forEach((item, i) => {
+      const b = BOXES.get(i);
+      if (re.test(item.n) && b) found.push(b);
+    });
+    const sets = merge && found.length ? [found.reduce((u, b) => u.map((v, j) => (j < 3 ? Math.min(v, b[j]) : Math.max(v, b[j]))))] : found;
+    for (const b of sets) {
+      const soft = Math.min(8, Math.max(2, Math.sqrt((b[3] - b[0]) * (b[4] - b[1])) / 6));
+      shadows.push({ rect: [b[0], b[1], b[3], b[4]], z: b[2], soft, k });
+    }
+  }
+  if (shadows.length > 16) shadows.length = 16;
+  const shadowRect = new Float32Array(64);
+  const shadowZ = new Float32Array(48);
+  shadows.forEach((sh, i) => {
+    shadowRect.set(sh.rect, i * 4);
+    shadowZ.set([sh.z, sh.soft, sh.k], i * 3);
+  });
+
   // ── шейдеры ──
   const VCOMMON = `
 precision highp float;
@@ -472,9 +518,9 @@ uniform vec2 uO;
 uniform float uK;
 uniform vec2 uView;
 uniform float uDepth;
-uniform float uT[9];
-uniform float uU[9];
-uniform vec3 uUM[9];
+uniform float uT[12];
+uniform float uU[12];
+uniform vec3 uUM[12];
 uniform float uDur;
 uniform float uSpin[3];
 uniform vec2 uSpinC[3];
@@ -493,7 +539,7 @@ vec3 turn(vec3 p,float s){vec2 cs=spinOf(s);if(s<.5)return p;vec2 c=spinC(s);vec
 vec3 turnN(vec3 n,float s){vec2 cs=spinOf(s);if(s<.5)return n;return vec3(n.x*cs.x-n.y*cs.y,n.x*cs.y+n.y*cs.x,n.z);}
 vec3 offsetOf(vec4 mv,float unitId){
   float t=0.;float u=0.;vec3 um=vec3(0.);
-  for(int k=0;k<9;k++)if(float(k)==unitId){t=uT[k];u=uU[k];um=uUM[k];}
+  for(int k=0;k<12;k++)if(float(k)==unitId){t=uT[k];u=uU[k];um=uUM[k];}
   float x=clamp((t-mv.w)/uDur,0.,1.);
   float share=x*x*(3.-2.*x);
   return mv.xyz*share+um*u;
@@ -511,9 +557,10 @@ float focusShift(float mask){
 }`;
   const FACE_V = `${VCOMMON}
 attribute vec3 aPos;attribute vec3 aNor;attribute vec4 aMove;attribute vec4 aMeta;
-varying vec3 vN;varying float vFlags;varying float vDepth;
+varying vec3 vN;varying float vFlags;varying float vDepth;varying vec3 vP;
 void main(){
   vec3 p=turn(aPos,aMeta.y)+offsetOf(aMove,aMeta.x);
+  vP=p;
   vN=turnN(aNor,aMeta.y);
   vFlags=aMeta.z;
   vDepth=depthOf(p);
@@ -521,8 +568,9 @@ void main(){
 }`;
   const FACE_F = `
 precision highp float;
-varying vec3 vN;varying float vFlags;varying float vDepth;
+varying vec3 vN;varying float vFlags;varying float vDepth;varying vec3 vP;
 uniform vec3 uL;
+uniform vec4 uShRect[16];uniform vec3 uShZ[16];uniform float uShK;uniform float uMat;
 uniform vec3 uShade[5];
 uniform vec3 uLitShade;uniform vec3 uLitTop;
 uniform float uMode; // 0 цвет, 1 глубина, 2 номер детали
@@ -532,7 +580,7 @@ float bit(float mask,float k){return mod(floor(mask/pow(2.,k)+.001),2.);}
 vec3 pack(float v){vec3 e=fract(v*vec3(1.,255.,65025.));e-=e.yzz*vec3(1./255.,1./255.,0.);return e;}
 void main(){
   if(uMode>1.5){gl_FragColor=vec4(mod(uPick,256.)/255.,floor(uPick/256.)/255.,0.,1.);return;}
-  if(uMode>.5){gl_FragColor=vec4(pack(clamp((vDepth+uDepth)/(2.*uDepth),0.,.999)),1.);return;}
+  if(uMode>.5){gl_FragColor=vec4(pack(clamp((vDepth+uDepth)/(2.*uDepth),0.,.999)),bit(vFlags,7.)>.5?.7:1.);return;}
   vec3 n=normalize(vN);
   float sc=dot(n,uL);
   float w=.012;
@@ -540,6 +588,22 @@ void main(){
   vec3 c=mix(mix(mix(mix(uShade[0],uShade[1],b1),uShade[2],b2),uShade[3],b3),uShade[4],b4);
   if(bit(vFlags,5.)>.5)c=mix(uLitShade,uLitTop,b4);
   if(bit(vFlags,6.)>.5)c=uShade[0];
+  // медь и латунь: оттенок поверх тона грани
+  if(bit(vFlags,8.)>.5)c=mix(c,c*vec3(1.,.74,.56),uMat);
+  else if(bit(vFlags,9.)>.5)c=mix(c,c*vec3(1.,.88,.55),uMat);
+  // контактная тень на опорной плоскости (только верхние грани)
+  if(uShK>.001&&n.z>.7){
+    float sh=0.;
+    for(int i=0;i<16;i++){
+      vec3 z=uShZ[i];
+      if(z.z>0.&&abs(vP.z-z.x)<.8){
+        vec4 r=uShRect[i];
+        vec2 d=max(max(r.xy-vP.xy,vP.xy-r.zw),0.);
+        sh=max(sh,z.z*exp(-dot(d,d)/(2.*z.y*z.y)));
+      }
+    }
+    c*=1.-uShK*sh;
+  }
   gl_FragColor=vec4(c,1.);
 }`;
   const EDGE_V = `${VCOMMON}
@@ -612,6 +676,8 @@ void main(){
   vec2 q=gl_PointCoord*2.-1.;float r=length(q);
   float edge=1.-smoothstep(.82,1.,r);
   if(edge<=0.)discard;
+  // светодиод: цветное ядро и короткий ореол на корпусе
+  if(vRing>1.5){float core=1.-smoothstep(.42,.62,r);gl_FragColor=vec4(vColor.rgb,1.)*(core+.3*(1.-core)*edge)*vColor.a;return;}
   vec3 c;
   if(vRing>.5){c=mix(uPaper,uRef,smoothstep(.38,.55,r));}
   else{c=mix(vColor.rgb,uPaper,smoothstep(.62,.8,r));}
@@ -800,6 +866,8 @@ precision highp float;
 uniform vec4 uCam;uniform vec3 uC;uniform vec2 uO;uniform float uK;uniform vec2 uView;uniform float uDepth;
 uniform vec2 uCanvas;uniform sampler2D uZ;
 uniform vec4 uLevel;uniform vec2 uPhase;uniform float uLight;uniform float uTime;
+uniform float uTs;uniform float uTr;uniform float uTb;uniform float uTo;uniform float uTe;
+vec3 gL;float gPor;
 float hash12(vec2 p){vec3 q=fract(vec3(p.xyx)*.1031);q+=dot(q,q.yzx+33.33);return fract((q.x+q.y)*q.z);}
 float hash13(vec3 p){p=fract(p*.1031);p+=dot(p,p.zyx+31.32);return fract((p.x+p.y)*p.z);}
 float hp(vec3 i,float per){return hash13(vec3(i.x,mod(i.y,per),i.z));}
@@ -809,7 +877,9 @@ float tnoise(vec3 p,float per){vec3 i=floor(p);vec3 f=fract(p);f=f*f*(3.-2.*f);
   return mix(a,b,f.z);}
 float unpack(vec4 e){return dot(e.rgb,vec3(1.,1./255.,1./65025.));}
 bool hitBox(vec3 p0,vec3 V,vec3 lo,vec3 hi){vec3 inv=1./V;vec3 t0=(lo-p0)*inv;vec3 t1=(hi-p0)*inv;vec3 a=min(t0,t1);vec3 b=max(t0,t1);return max(max(a.x,a.y),a.z)<min(min(b.x,b.y),b.z);}
-void seg(inout vec4 acc,vec3 p0,vec3 V,float tF,vec3 a,vec3 b,vec3 rs,vec2 m){
+// Отрезок трубки потока: плотность (max), а также средние по весу профиля координата вдоль потока,
+// поперечный сдвиг, температура, освещённая сторона и радиальное положение луча.
+void seg(inout vec4 acc,inout vec4 acc2,vec3 p0,vec3 V,float tF,vec3 a,vec3 b,vec3 rs,vec2 m,vec2 tt){
   float ra=rs.x;float rb=rs.y;float s0=rs.z;
   vec3 d=b-a;vec3 w=a-p0;
   vec3 dp=d-dot(d,V)*V;vec3 wp=w-dot(w,V)*V;
@@ -821,28 +891,43 @@ void seg(inout vec4 acc,vec3 p0,vec3 V,float tF,vec3 a,vec3 b,vec3 rs,vec2 m){
   float tq=dot(w+u*d,V);
   float sig=.45*r+.6;
   float vis=1./(1.+exp(min(2.41*(tF-tq)/sig,40.)));
+  if(gPor>.5)vis=max(vis,.55/(1.+exp(min(2.41*(tF-34.-tq)/sig,40.))));
   vec3 n=cross(V,d);float nl=length(n);
   float x=nl>1e-4?dot(e,n/nl):0.;
   float wgt=g+1e-5;
   acc.x=max(acc.x,g*vis*mix(m.x,m.y,u));acc.y+=wgt;acc.z+=wgt*(s0+u*length(d));acc.w+=wgt*x;
+  acc2.x+=wgt*mix(tt.x,tt.y,u);acc2.y+=wgt*dot(-e,gL)/r;acc2.z+=wgt*d2/(r*r);
 }
-float finish(vec4 acc,float ph,float seed,float px){
-  if(acc.x<.003)return 0.;
+// Цвет по температуре: мороз тёмно-синий, подача голубая, около 27 °C нейтральный, горячий янтарный и оранжевый
+vec3 tcol(float T){
+  vec3 c=mix(vec3(.13,.3,.7),vec3(.27,.55,.9),smoothstep(-8.,21.,T));
+  c=mix(c,vec3(.74,.66,.58),smoothstep(22.,26.,T));
+  c=mix(c,vec3(.93,.6,.24),smoothstep(25.,31.,T));
+  return mix(c,vec3(.93,.38,.14),smoothstep(34.,46.,T));
+}
+vec4 over(vec4 top,vec4 under){return top+under*(1.-top.a);}
+vec4 stream(vec4 acc,vec4 acc2,float ph,float seed,float px,float level){
+  float dens=acc.x*level;
+  if(dens<.003)return vec4(0.);
   float s=acc.z/acc.y;float x=acc.w/acc.y;
+  float T=acc2.x/acc.y;float lit=clamp(acc2.y/acc.y,-1.,1.);float rho=clamp(acc2.z/acc.y,0.,1.);
   float q=(s-ph)/12.;
   float fine=smoothstep(2.5,4.5,1.3/px);
   float n=.6*tnoise(vec3(x/2.6+seed,q,uTime*.08),48.)+.4*mix(.5,tnoise(vec3(x/1.3+seed*1.7,q*2.,uTime*.13+3.1),96.),fine);
   float streak=smoothstep(.3,.82,n);
-  return acc.x*(.26+.74*streak);
-}
-vec4 ink(float dens,vec3 tint,vec3 glow,float cap){
-  float a=cap*(1.-exp(-2.4*dens));
-  vec4 light=vec4(tint*a,a);
-  vec3 c=glow*dens*.75;
+  // волна вдоль потока: пологий тыл и резкий фронт, фронт смотрит по направлению движения
+  float f=fract((s-ph)/48.+seed*.37);
+  float wave=smoothstep(0.,.78,f)*(1.-smoothstep(.86,1.,f));
+  dens*=.3+.6*streak+.34*wave;
+  vec3 tint=tcol(T);
+  // объём: ядро бледнее, край насыщеннее; сторона к свету светлее
+  vec3 lc=mix(tint,vec3(1.),.2*(1.-rho)+.08*lit);
+  float a=.64*(1.-exp(-2.8*dens));
+  vec4 light=vec4(lc*a,a);
+  vec3 c=(tint*1.08+.04)*dens*(.68+.16*lit+.12*wave);
   vec4 dark=vec4(c,max(c.r,max(c.g,c.b)));
   return mix(dark,light,uLight);
 }
-vec4 over(vec4 top,vec4 under){return top+under*(1.-top.a);}
 `;
   const AIR_MAIN = (code) => `${AIR_COMMON}
 void main(){
@@ -855,11 +940,10 @@ void main(){
   float px=(uView.x/uCanvas.x)/uK;
   vec4 z=texture2D(uZ,gl_FragCoord.xy/uCanvas);
   float tF=z.a<.5?-1e4:unpack(z)*2.*uDepth-uDepth;
-  float d0=0.;float d1=0.;float d2=0.;float d3=0.;
-  vec4 acc;
+  gL=normalize(-.55*R-.83*Dn);
+  gPor=z.a>.5&&z.a<.85?1.:0.;
+  vec4 acc;vec4 acc2;vec4 col=vec4(0.);
 ${code}
-  vec4 col=over(ink(d1*uLevel.y,vec3(.9,.62,.3),vec3(1.,.62,.26),.44),ink(d0*uLevel.x,vec3(.36,.62,.9),vec3(.32,.58,1.),.56));
-  col=over(ink(d3*uLevel.w,vec3(.92,.64,.3),vec3(1.,.66,.3),.46),over(ink(d2*uLevel.z,vec3(.42,.64,.88),vec3(.42,.62,.95),.5),col));
   col.rgb=min(col.rgb,vec3(col.a));
   float n=(hash12(gl_FragCoord.xy+fract(uTime*.61)*91.)+hash12(gl_FragCoord.yx*1.37+fract(uTime*.37)*57.)-1.)/255.;
   col=max(col+n*smoothstep(0.,1.5/255.,col.a),0.);
@@ -883,7 +967,7 @@ ${code}
   function camUniforms() {
     const a = (cam.az * Math.PI) / 180;
     const e = (cam.el * Math.PI) / 180;
-    return { uCam: [Math.sin(a), Math.cos(a), Math.sin(e), Math.cos(e)], uC: C, uO: [restO[0] + cam.pan[0], restO[1] + cam.pan[1]], uK: K0 * cam.zoom, uView: [W, H], uDepth: DEPTH };
+    return { uCam: [Math.sin(a), Math.cos(a), Math.sin(e), Math.cos(e)], uC: C, uO: [restO[0] + cam.pan[0] + view.ox, restO[1] + cam.pan[1] + view.oy], uK: K0 * cam.zoom, uView: [view.w, view.h], uDepth: DEPTH };
   }
   const viewDir = () => {
     const a = (cam.az * Math.PI) / 180;
@@ -899,14 +983,16 @@ ${code}
 
   // ── состояние, которое задаёт страница ──
   const UNIT_COUNT = D.units.length;
+  if (UNIT_COUNT > 12) throw new Error("узлов больше 12");
   const st = {
-    T: new Float32Array(9),
-    U: new Float32Array(9),
-    UM: new Float32Array(27),
+    T: new Float32Array(12),
+    U: new Float32Array(12),
+    UM: new Float32Array(36),
     spin: new Float32Array(3),
     step: -1,
-    air: { levels: [0, 0, 0, 0], phase: [0, 0], time: 0 },
+    air: { levels: [0, 0, 0, 0], phase: [0, 0], time: 0, temps: { s: 22, r: 42, b: 32, o: 10, e: 20 } },
     marks: [],
+    shadow: 1,
   };
   D.units.forEach((u, i) => st.UM.set(u.unit, i * 3));
   const spinC = new Float32Array([...D.blades.flatMap((f) => f.c), ...D.wheel.c]);
@@ -922,6 +1008,10 @@ ${code}
       canvas.height = h;
       depthFbo.valid = false;
     }
+    // кадр рисунка W×H вписан в холст любой пропорции (полный экран): лишнее поле поровну по краям
+    const aspect = w / h;
+    if (aspect > W / H) Object.assign(view, { w: H * aspect, h: H, ox: (H * aspect - W) / 2, oy: 0 });
+    else Object.assign(view, { w: W, h: W / aspect, ox: 0, oy: (W / aspect - H) / 2 });
   }
   const common = (prog) => {
     const u = camUniforms();
@@ -945,6 +1035,10 @@ ${code}
     setU(prog, "uShade", new Float32Array(COL.shade.flat()));
     setU(prog, "uLitShade", COL.litShade);
     setU(prog, "uLitTop", COL.litTop);
+    setU(prog, "uShRect", shadowRect);
+    setU(prog, "uShZ", shadowZ);
+    setU(prog, "uShK", (theme === "dark" ? 0.32 : 0.22) * st.shadow);
+    setU(prog, "uMat", theme === "dark" ? 0.4 : 0.55);
     useAttribs(4);
     for (const b of faceGpu) {
       attrib(0, b.pos, 3);
@@ -996,8 +1090,8 @@ ${code}
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.enable(gl.SCISSOR_TEST);
     const u = camUniforms();
-    const sx = canvas.width / W;
-    const sy = canvas.height / H;
+    const sx = canvas.width / view.w;
+    const sy = canvas.height / view.h;
     for (const g of airGroups) {
       // прямоугольник группы: проекция углов её рамки
       let x0 = Infinity;
@@ -1024,6 +1118,12 @@ ${code}
       setU(g.prog, "uPhase", st.air.phase);
       setU(g.prog, "uLight", theme === "dark" ? 0 : 1);
       setU(g.prog, "uTime", st.air.time);
+      const tp = st.air.temps;
+      setU(g.prog, "uTs", tp.s);
+      setU(g.prog, "uTr", tp.r);
+      setU(g.prog, "uTb", tp.b);
+      setU(g.prog, "uTo", tp.o);
+      setU(g.prog, "uTe", tp.e);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, depthFbo.tex);
       setU(g.prog, "uZ", 0);
@@ -1048,7 +1148,7 @@ ${code}
     gl.disable(gl.SCISSOR_TEST);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    const pxPerUnit = ((K0 * cam.zoom) / 1) * (canvas.width / W);
+    const pxPerUnit = ((K0 * cam.zoom) / 1) * (canvas.width / view.w);
     // ореол под основанием
     gl.disable(gl.DEPTH_TEST);
     gl.depthMask(false);
@@ -1124,7 +1224,7 @@ ${code}
       setU(prog, "uTone", new Float32Array(COL.tone.flat()));
       setU(prog, "uDot", COL.dot);
       setU(prog, "uAlpha", lineAlpha);
-      setU(prog, "uPx", (canvas.width / W) * cam.zoom);
+      setU(prog, "uPx", (canvas.width / view.w) * cam.zoom);
       useAttribs(4);
       setU(prog, "uPoint", 0);
       attrib(0, detailGpu.pos, 3);
@@ -1160,7 +1260,7 @@ ${code}
       const prog = P.mark;
       gl.useProgram(prog.p);
       common(prog);
-      setU(prog, "uPx", (canvas.width / W) * cam.zoom * K0);
+      setU(prog, "uPx", (canvas.width / view.w) * cam.zoom * K0);
       setU(prog, "uPaper", COL.paper);
       setU(prog, "uRef", COL.ref);
       useAttribs(3);
@@ -1242,11 +1342,11 @@ void main(){vId=aMeta.w;gl_Position=clipOf(turn(aPos,aMeta.y)+offsetOf(aMove,aMe
     const size = [];
     for (const m of list) {
       const t = m.tangent;
-      const lift = unit(sub(V, mul(t, dot(V, t))));
+      const lift = m.normal ?? unit(sub(V, mul(t, dot(V, t))));
       const p = add(add(m.at, mul(lift, m.lift)), mul(V, 0.2));
       pos.push(...p);
       color.push(...m.color);
-      size.push(m.size, m.ring ? 1 : 0);
+      size.push(m.size, m.led ? 2 : m.ring ? 1 : 0);
     }
     markGpu.count = list.length;
     api.firstMark = pos.slice(0, 3).map((v) => Math.round(v * 100) / 100);
@@ -1273,6 +1373,8 @@ void main(){vId=aMeta.w;gl_Position=clipOf(turn(aPos,aMeta.y)+offsetOf(aMove,aMe
     draw,
     pick,
     project,
+    frame: () => ({ ...view }),
+    shadows,
     viewDir,
     setMarks,
     invalidate() {

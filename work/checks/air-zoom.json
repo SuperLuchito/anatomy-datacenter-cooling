@@ -1,0 +1,7 @@
+[
+  ["wait", 6000],
+  ["click", "[data-preset=\"20\"]"],
+  ["wait", 3000],
+  ["shot", "shots/3d/air-z-racks.png", ".dc-card .iso-plate", 2, [60, 60, 400, 330]],
+  ["shot", "shots/3d/air-z-dry.png", ".dc-card .iso-plate", 2, [560, 280, 260, 260]]
+]

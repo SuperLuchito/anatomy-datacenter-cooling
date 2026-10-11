@@ -1,0 +1,9 @@
+[
+  ["wait", 3000],
+  ["key", "f", ".dc-viewport", "KeyF"],
+  ["wait", 1000],
+  ["eval", "(() => { const b = document.querySelector('[data-act=full]'); b.scrollIntoView({block: 'center'}); const r = b.getBoundingClientRect(); return JSON.stringify([Math.round(r.x), Math.round(r.y)]); })()"],
+  ["click", "[data-act=\"full\"]"],
+  ["wait", 800],
+  ["eval", "document.querySelector('.dc-layout').hasAttribute('data-full') + ' · ' + document.querySelector('[data-act=full]').textContent + ' · native ' + !!document.fullscreenElement"]
+]

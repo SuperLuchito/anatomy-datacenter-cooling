@@ -1,0 +1,11 @@
+[
+  ["wait", 3000],
+  ["shot", "shots/3d/nowebgl.png", ".dc-card .iso-plate", 1],
+  ["key", "f", ".dc-viewport", "KeyF"],
+  ["wait", 1200],
+  ["eval", "JSON.stringify({full: document.querySelector('.dc-layout').hasAttribute('data-full'), svg: (() => { const r = document.querySelector('.dc-zoomer > svg').getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; })(), pressed: document.querySelector('[data-act=full]').getAttribute('aria-pressed'), text: document.querySelector('[data-act=full]').textContent})"],
+  ["shot", "shots/3d/full-2d.png", ".dc-layout", 1],
+  ["click", "[data-act=\"full\"]"],
+  ["wait", 800],
+  ["eval", "document.querySelector('.dc-layout').hasAttribute('data-full') + ' · ' + document.querySelector('[data-act=full]').textContent + ' · ' + document.querySelector('[data-status]').textContent"]
+]

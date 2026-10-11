@@ -112,6 +112,32 @@ body{margin:0;background:var(--anatomy-page);color:var(--anatomy-text);font:15px
 .dc-details a{color:var(--dc-focus);overflow-wrap:anywhere}
 .dc-foot{margin-top:18px;color:var(--anatomy-muted);font-size:12.5px}
 
+/* полный экран: рисунок занимает окно, панель управления справа (на узком экране снизу) */
+.dc-stage{position:relative}
+.dc-full{position:absolute;top:36px;right:12px;z-index:3;display:grid;place-items:center;width:30px;height:30px;padding:0;border:0;border-radius:4px;background:var(--anatomy-card);color:var(--anatomy-strong);box-shadow:0 0 0 1px var(--dc-line);cursor:pointer}
+.dc-full:hover{box-shadow:0 0 0 1px var(--anatomy-muted)}
+.dc-full:focus-visible{outline:2px solid var(--dc-focus);outline-offset:2px}
+.dc-full svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.dc-full-out,.dc-layout[data-full] .dc-full-in{display:none}
+.dc-layout[data-full] .dc-full-out{display:inline}
+html[data-dc-full],html[data-dc-full] body{overflow:hidden}
+.dc-layout[data-full]{position:fixed;inset:0;z-index:100;width:auto;margin:0;padding:12px;gap:12px;background:var(--anatomy-page);grid-template-columns:minmax(0,1fr) 320px;grid-template-rows:minmax(0,1fr);align-items:stretch;overflow:hidden}
+.dc-layout[data-full] .dc-main{display:flex;flex-direction:column;gap:10px;min-height:0}
+.dc-layout[data-full] .dc-card{display:flex;flex-direction:column;flex:1 1 auto;min-height:0}
+.dc-layout[data-full] .dc-card .iso-plate{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;padding:40px 14px 44px}
+.dc-layout[data-full] .dc-viewport{flex:1 1 auto;min-height:0}
+.dc-layout[data-full] .dc-zoomer{height:100%}
+.dc-layout[data-full] .dc-zoomer>svg{position:absolute;inset:0;width:100%;height:100%}
+.dc-layout[data-full] .dc-legend{margin-top:8px}
+.dc-layout[data-full] .dc-legend .dc-cond,.dc-layout[data-full] .dc-balance{display:none}
+.dc-layout[data-full] .dc-explain{margin-top:0;padding:10px 14px}
+.dc-layout[data-full] .dc-explain p{min-height:0}
+.dc-layout[data-full] .dc-panel{position:static;min-height:0;max-height:100%;overflow:auto;grid-template-columns:1fr}
+@media (max-width:1000px){
+  .dc-layout[data-full]{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto}
+  .dc-layout[data-full] .dc-panel{max-height:38vh}
+  .dc-layout[data-full] .dc-explain,.dc-layout[data-full] .dc-legend{display:none}
+}
 @media (max-width:1000px){
   .dc-layout{grid-template-columns:1fr}
   .dc-panel{position:static;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}

@@ -242,6 +242,71 @@ function valveOn(piece, name, line, along, r, { side = [0, 0, 1], group, tone = 
   return id;
 }
 
+// Корпус на прямом участке трубы (ресивер, фильтр-осушитель, смотровое стекло): торцы ловят концы трубы.
+function inlineCan(piece, name, line, along, rBody, half, rLine, { group, tone = "hi", rings = true } = {}) {
+  const centre = G.pointAlong(line, along);
+  const F3 = G.frameAlong(centre, G.tangentAlong(line, along));
+  const rEnd = rLine * 1.18;
+  const lip = Math.min(1, half * 0.3);
+  const meridian = [[-half, 0], [-half, rEnd], [-half + lip, rBody], [half - lip, rBody], [half, rEnd], [half, 0]];
+  const extra = rings ? Ln([-half + lip + 0.9, half - lip - 0.9].map((s) => G.circleOf(F3, s, rBody, P, 32)).join(""), { tone: "faint" }) : "";
+  const shape = record(A.body(F3, meridian, { name, owner: line.owner }));
+  put(piece, name, centre, S(G.lathe(meridian, F3, P, { steps: 36 }), { tone }) + extra, [shape], { group });
+  return shape;
+}
+
+// Шаровой кран: корпус, шток и рукоятка вдоль оси x или y (рукоятка вдоль трубы — кран открыт).
+function ballValveOn(piece, name, line, along, r, { lever = [1, 0, 0], group, tone = "hi" } = {}) {
+  const centre = G.pointAlong(line, along);
+  const F3 = G.frameAlong(centre, G.tangentAlong(line, along));
+  const half = r * 2;
+  const crown = r * 1.6;
+  const meridian = [[-half, 0], [-half, r * 1.25], [-half + 0.9, r * 1.45], [-r * 0.9, r * 1.45], [-r * 0.5, crown], [r * 0.5, crown], [r * 0.9, r * 1.45], [half - 0.9, r * 1.45], [half, r * 1.25], [half, 0]];
+  const owner = line.owner;
+  put(piece, name, centre, S(G.lathe(meridian, F3, P, { steps: 36 }), { tone }) + Dots([...G.dotsOf(F3, -half, r * 1.05, 4, P, { all: true }), ...G.dotsOf(F3, half, r * 1.05, 4, P, { all: true })], { size: 0.35, tone: "mid" }), [record(A.body(F3, meridian, { name, owner }))], { group });
+  const NF = G.frameOf(centre, [0, 0, 1], [1, 0, 0], [0, 1, 0]);
+  const neckTop = crown + r * 0.8;
+  disc(piece, `${name}.stem`, NF, crown - 0.3, neckTop, r * 0.32, { tone }, { owner, group });
+  const len = r * 2.8;
+  const w = r * 0.42;
+  const z0 = centre[2] + neckTop;
+  const [lx, ly] = lever;
+  const min = [centre[0] + Math.min(0, lx * len) - (lx ? 0 : w / 2), centre[1] + Math.min(0, ly * len) - (ly ? 0 : w / 2), z0];
+  const max = [centre[0] + Math.max(0, lx * len) + (lx ? 0 : w / 2), centre[1] + Math.max(0, ly * len) + (ly ? 0 : w / 2), z0 + r * 0.32];
+  box(piece, `${name}.lever`, min, max, { tone }, { r: 0.15, steps: 1, owner, group });
+  return half;
+}
+
+// Сетчатый Y-фильтр: корпус на трубе и наклонный стакан с сеткой и пробкой.
+function strainerOn(piece, name, line, along, r, { leg = [0, 0.8, -0.6], group, tone = "hi" } = {}) {
+  const half = r * 2.2;
+  const body = inlineCan(piece, name, line, along, r * 1.35, half, r, { group, tone, rings: false });
+  const centre = G.pointAlong(line, along);
+  const dir = G.unit3(leg);
+  const face = padOn(piece, `${name}.leg`, body, G.add3(centre, G.mul3(dir, r * 1.35 - 0.2)), dir, r * 0.55, r * 1.5, { tone }, { owner: line.owner, group });
+  disc(piece, `${name}.plug`, G.frameAlong(face, dir), 0, 1.2, r * 0.68, { tone: "mid" }, { owner: line.owner, group });
+  return half;
+}
+
+// Манометр на трубе: седловая площадка, штуцер вверх и корпус циферблатом к зрителю.
+function gaugeOn(piece, name, host, point, { group, owner, face = [0, 1, 0] } = {}) {
+  const top = padOn(piece, `${name}.boss`, host, point, [0, 0, 1], 1.15, 0.6, { tone: "mid" }, { owner, group });
+  const NF = G.frameOf(top, [0, 0, 1], [1, 0, 0], [0, 1, 0]);
+  disc(piece, `${name}.neck`, NF, 0, 3.4, 0.45, { tone: "mid" }, { owner, group });
+  const R0 = 2.4;
+  const c = G.add3(top, [0, 0, 3.4 + R0]);
+  const DF = G.frameAlong(c, face);
+  const front = 0.7;
+  const needle = path3([c.map((v, i) => v + face[i] * front), G.add3(G.add3(c, G.mul3(face, front)), [1.3, 0, 1.2])]);
+  const ticks = Array.from({ length: 7 }, (_, i) => {
+    const a = Math.PI * (1.15 - i * 0.22);
+    const p = (rr) => G.add3(G.add3(c, G.mul3(face, front)), [rr * Math.cos(a), 0, rr * Math.sin(a)]);
+    return path3([p(1.55), p(1.9)]);
+  }).join("");
+  const extra = Ln(G.circleOf(DF, front, R0 - 0.35, P, 40), { tone: "lo" }) + Ln(ticks, { tone: "mid" }) + Ln(needle, { tone: "hi" });
+  disc(piece, name, DF, -front, front, R0, { tone: "hi" }, { owner, group, extra });
+}
+
 // Закрытая прорезь на вертикальной грани y = const.
 const slotY = (cx, cz, w, h, y, r = Math.min(w, h) / 2) => path3(k.roundedPlan({ x: cx - w / 2, y: cz - h / 2, w, d: h, r }, 3).map(([x, z]) => [x, y, z]), true);
 // То же на грани x = const.
@@ -473,6 +538,43 @@ const CR = { ...CRAC };
   }
 }
 
+// ── Возврат горячего воздуха по каналу ──────────────────────────────
+// Кондиционер стоит не у торца горячего коридора, поэтому горячий воздух собирается колпаком над
+// горячим коридором и идёт по каналу к верхнему входу (рекомендации IBM и Vertiv: «direct ducting back
+// to the air returns», «use the overhead plenum for hot air return»). Ближняя к зрителю стенка канала
+// и передняя стенка переходного короба вырезаны, чтобы был виден воздух внутри.
+const DUCT = { y0: -98, y1: -74, z0: 134, z1: 148, hoodX0: -252, hoodX1: -158, cornerX0: -80, cornerX1: -56, boxX0: -94, boxX1: -42, boxY0: 38, boxY1: 74, t: 1 };
+{
+  const g = "crac";
+  const own = "duct";
+  const { y0, y1, z0, z1, hoodX0, hoodX1, cornerX0, cornerX1, boxX0, boxX1, boxY0, boxY1, t } = DUCT;
+  const seamsX = (xs, y) => Ln(xs.map((x) => path3([[x, y, z0 + t], [x, y, z1 - t]])).join(""), { tone: "faint" });
+  // колпак над горячим коридором и горизонтальный короб вдоль x (низ открыт над стойками)
+  box("crac", "duct.top", [hoodX0, y0, z1 - t], [cornerX1, y1, z1], { tone: "mid" }, { r: 0.3, steps: 1, owner: own, group: g, extra: Ln([hoodX1, -120, cornerX0].map((x) => path3([[x, y0, z1], [x, y1, z1]])).join(""), { tone: "faint" }) + Dots([hoodX0 + 3, hoodX1 - 3, cornerX1 - 3].flatMap((x) => [at([x, y0 + 2, z1]), at([x, y1 - 2, z1])]), { size: 0.4 }) });
+  box("crac", "duct.wall", [hoodX0, y0, z0], [cornerX1, y0 + t, z1 - t], { tone: "lo" }, { r: 0.2, steps: 1, owner: own, group: g, extra: seamsX([hoodX1, -120, cornerX0], y0 + t) });
+  box("crac", "duct.end", [hoodX0, y0 + t, z0], [hoodX0 + t, y1, z1 - t], { tone: "lo" }, { r: 0.2, steps: 1, owner: own, group: g });
+  box("crac", "duct.end", [cornerX1 - t, y0 + t, z0 + t], [cornerX1, y1, z1 - t], { tone: "lo" }, { r: 0.2, steps: 1, owner: own, group: g });
+  box("crac", "duct.skirt", [hoodX0 + t, y1 - t, z1 - 4], [hoodX1, y1, z1 - t], { tone: "mid" }, { r: 0.2, steps: 1, owner: own, group: g });
+  box("crac", "duct.floor", [hoodX1, y0 + t, z0], [cornerX1 - t, y1, z0 + t], { tone: "lo" }, { r: 0.2, steps: 1, owner: own, group: g });
+  // короб вдоль y к кондиционеру (вырезана стенка со стороны +x)
+  box("crac", "duct.top", [cornerX0, y1, z1 - t], [cornerX1, boxY0, z1], { tone: "mid" }, { r: 0.3, steps: 1, owner: own, group: g, extra: Ln([-30, 6].map((y) => path3([[cornerX0, y, z1], [cornerX1, y, z1]])).join(""), { tone: "faint" }) });
+  box("crac", "duct.wall", [cornerX0, y1, z0], [cornerX0 + t, boxY0, z1 - t], { tone: "lo" }, { r: 0.2, steps: 1, owner: own, group: g });
+  box("crac", "duct.floor", [cornerX0 + t, y1, z0], [cornerX1, boxY0, z0 + t], { tone: "lo" }, { r: 0.2, steps: 1, owner: own, group: g });
+  // переходный короб на крыше кондиционера над решёткой возврата (передняя стенка вырезана)
+  const bz0 = CRAC.z1;
+  box("crac", "duct.box.top", [boxX0, boxY0, z1 - t], [boxX1, boxY1, z1], { tone: "mid" }, { r: 0.4, steps: 2, owner: own, group: g, extra: Dots(k.corners({ x: boxX0, y: boxY0, w: boxX1 - boxX0, d: boxY1 - boxY0 }, 2).map(([x, y]) => at([x, y, z1])), { size: 0.4 }) });
+  box("crac", "duct.box.side", [boxX0, boxY0, bz0], [boxX0 + t, boxY1, z1 - t], { tone: "lo" }, { r: 0.2, steps: 1, owner: own, group: g });
+  box("crac", "duct.box.side", [boxX1 - t, boxY0, bz0], [boxX1, boxY1, z1 - t], { tone: "mid" }, { r: 0.2, steps: 1, owner: own, group: g, extra: Dots([bz0 + 3, z1 - 4].flatMap((z) => [at([boxX1, boxY0 + 3, z]), at([boxX1, boxY1 - 3, z])]), { size: 0.4 }) });
+  box("crac", "duct.box.back", [boxX0 + t, boxY0, bz0], [cornerX0, boxY0 + t, z1 - t], { tone: "lo" }, { r: 0.2, steps: 1, owner: own, group: g });
+  box("crac", "duct.box.back", [cornerX1, boxY0, bz0], [boxX1 - t, boxY0 + t, z1 - t], { tone: "lo" }, { r: 0.2, steps: 1, owner: own, group: g });
+  box("crac", "duct.box.back", [cornerX0, boxY0, bz0], [cornerX1, boxY0 + t, z0], { tone: "lo" }, { r: 0.2, steps: 1, owner: own, group: g });
+  // стойки из профиля на настиле: под колпаком и под коробом
+  for (const [x, y] of [[hoodX0 + 2, (y0 + y1) / 2], [-120, (y0 + y1) / 2], [(cornerX0 + cornerX1) / 2, -30]]) {
+    box("crac", "duct.post.plate", [x - 3, y - 3, F], [x + 3, y + 3, F + 0.8], { tone: "lo" }, { r: 0.3, steps: 1, owner: own, group: g, extra: Dots([at([x - 2, y + 2, F + 0.8]), at([x + 2, y - 2, F + 0.8])], { size: 0.4 }) });
+    box("crac", "duct.post", [x - 1, y - 1, F + 0.8], [x + 1, y + 1, z0], { tone: "mid" }, { r: 0.2, steps: 1, owner: own, group: g, extra: Dots(Array.from({ length: 9 }, (_, i) => at([x + 1, y, F + 8 + i * 12])), { size: 0.3, tone: "lo" }) });
+  }
+}
+
 // ── Кондиционер: начинка ─────────────────────────────────────────────
 // Воздушная секция слева от перегородки, машинный отсек справа.
 const AIR = { x0: CRAC.x0 + POST, x1: PART_X, y0: CRAC.y0 + PANEL, y1: CRAC.y1 - POST };
@@ -589,8 +691,26 @@ INNER.rDown = pipe("glycol", "glycol.crac.return", [[RB[0], RB[1], RB[2] - RIM(G
 // ── Холодильный контур ───────────────────────────────────────────────
 const REF = {};
 REF.discharge = pipe("crac", "ref.discharge", [COMP.discharge, [COMP.x, COMP.y, BPHE.refIn[1]], [BPHE.x0 - BPHE.boss, ...BPHE.refIn]], RR, { group: "crac", flanges: [false, false], tone: "mid", bend: 4 });
-REF.liquid = pipe("crac", "ref.liquid", [[BPHE.x0 - BPHE.boss, ...BPHE.refOut], [PORT_X, DX.liqY, DX.liqZ]], RR, { group: "crac", flanges: [false, false], tone: "mid", valve: 24, valveR: 1.3 });
-valveOn("crac", "crac.txv", REF.liquid, 24, 1.3, { side: [0, 0, 1], group: "crac" });
+// жидкостная линия по HPM 2.1.1: конденсатор → ресивер → фильтр-осушитель → ТРВ → смотровое стекло → испаритель
+const LIQ = { receiver: [9, 2.6, 5], drier: [19, 1.5, 3.2], txv: 28, sight: [35.5, 1.3, 1.8] };
+REF.liquid = pipe("crac", "ref.liquid", [[BPHE.x0 - BPHE.boss, ...BPHE.refOut], [PORT_X, DX.liqY, DX.liqZ]], RR, {
+  group: "crac",
+  flanges: [false, false],
+  tone: "mid",
+  valve: LIQ.txv,
+  valveR: 1.3,
+  gaps: [LIQ.receiver, LIQ.drier, LIQ.sight].map(([at0, , half]) => [at0 - half, at0 + half]),
+});
+inlineCan("crac", "crac.receiver", REF.liquid, LIQ.receiver[0], LIQ.receiver[1], LIQ.receiver[2], RR, { group: "crac" });
+inlineCan("crac", "crac.drier", REF.liquid, LIQ.drier[0], LIQ.drier[1], LIQ.drier[2], RR, { group: "crac", tone: "mid" });
+valveOn("crac", "crac.txv", REF.liquid, LIQ.txv, 1.3, { side: [0, 0, 1], group: "crac" });
+{
+  const sight = inlineCan("crac", "crac.sight", REF.liquid, LIQ.sight[0], LIQ.sight[1], LIQ.sight[2], RR, { group: "crac", tone: "mid", rings: false });
+  const c = G.pointAlong(REF.liquid, LIQ.sight[0]);
+  // глазок смотрового стекла сверху корпуса
+  const top = padOn("crac", "crac.sight.glass", sight, G.add3(c, [0, 0, LIQ.sight[1] - 0.15]), [0, 0, 1], 0.8, 0.35, { tone: "hi" }, { owner: "ref.liquid", group: "crac" });
+  void top;
+}
 REF.suction = pipe("crac", "ref.suction", [[PORT_X, DX.sucY, DX.sucZ], [-46.5, DX.sucY, DX.sucZ], [-46.5, DX.sucY, COMP.suction[2]], COMP.suction], RR, { group: "crac", flanges: [false, false], tone: "mid", bend: 4 });
 for (const name of ["crac.valve12", "crac.valve13", "crac.txv"]) MODE_PARTS.add(name);
 
@@ -753,12 +873,89 @@ function support(name, x, y, collarBottom, { group = "glycol" } = {}) {
 const CLAMP = { r: LANE.r * 1.62, t: 2.4 };
 const COLLAR = CLAMP.r;
 const OUT = {};
-OUT.supplyDry = pipe("glycol", "glycol.supply.dry", [[HEADER.out.x, LANE.S, HEADER.flangeZ], [HEADER.out.x, LANE.S, LANE.z], [PUMP.inX, LANE.S, LANE.z]], LANE.r, { group: "glycol" });
-OUT.supplyRoom = pipe("glycol", "glycol.supply.room", [[PUMP.outX, LANE.S, LANE.z], [S_RISER.x, LANE.S, LANE.z], [S_RISER.x, LANE.S, JOINT]], LANE.r, { group: "glycol", bandPoints: [[14, LANE.S, LANE.z]], bandR: 1.62, bandT: CLAMP.t });
+// положения арматуры на трубах считаются по той же скруглённой трассе, что строит pipe()
+const preLine = (control, r) => G.fillet(control, Math.max(r * 2.6, 3), r > 3 ? 18 : 12, { P, tube: r });
+const alongNear = (line, point) => {
+  let best = 0;
+  let bestD = Infinity;
+  const total = G.pathLength(line);
+  for (let a = 0; a <= total; a += 0.05) {
+    const d = G.len3(G.sub3(G.pointAlong(line, a), point));
+    if (d < bestD) [best, bestD] = [a, d];
+  }
+  return best;
+};
+const HYD = { valveIn: 88, gaugeIn: 103, strainer: 118, tank: 128, valveOut: 38, vent: 52, gaugeRet: 120 };
+const SD_CTRL = [[HEADER.out.x, LANE.S, HEADER.flangeZ], [HEADER.out.x, LANE.S, LANE.z], [PUMP.inX, LANE.S, LANE.z]];
+const SR_CTRL = [[PUMP.outX, LANE.S, LANE.z], [S_RISER.x, LANE.S, LANE.z], [S_RISER.x, LANE.S, JOINT]];
+const SD_LINE = preLine(SD_CTRL, LANE.r);
+const SR_LINE = preLine(SR_CTRL, LANE.r);
+const AT = {
+  valveIn: alongNear(SD_LINE, [HYD.valveIn, LANE.S, LANE.z]),
+  strainer: alongNear(SD_LINE, [HYD.strainer, LANE.S, LANE.z]),
+  valveOut: alongNear(SR_LINE, [HYD.valveOut, LANE.S, LANE.z]),
+};
+const BV = LANE.r * 2; // половина длины корпуса шарового крана
+const ST = LANE.r * 2.2; // половина длины корпуса фильтра
+OUT.supplyDry = pipe("glycol", "glycol.supply.dry", SD_CTRL, LANE.r, { group: "glycol", gaps: [[AT.valveIn - BV, AT.valveIn + BV], [AT.strainer - ST, AT.strainer + ST]] });
+OUT.supplyRoom = pipe("glycol", "glycol.supply.room", SR_CTRL, LANE.r, { group: "glycol", bandPoints: [[14, LANE.S, LANE.z]], bandR: 1.62, bandT: CLAMP.t, gaps: [[AT.valveOut - BV, AT.valveOut + BV]] });
 OUT.returnRoom = pipe("glycol", "glycol.return.room", [[R_RISER.x, LANE.R, JOINT], [R_RISER.x, LANE.R, LANE.z], [38, LANE.R, LANE.z], [38, LANE.R, HEADER.in.z], [HEADER.in.stub, LANE.R, HEADER.in.z]], LANE.r, { group: "glycol", bandPoints: [[14, LANE.R, LANE.z], [100, LANE.R, HEADER.in.z]], bandR: 1.62, bandT: CLAMP.t });
 support("glycol.support.s", 14, LANE.S, LANE.z - COLLAR);
 support("glycol.support.r", 14, LANE.R, LANE.z - COLLAR);
 support("glycol.support.high", 100, LANE.R, HEADER.in.z - COLLAR);
+
+// ── Гидравлическая арматура контура (Vertiv Drycooler, Liebert DS): ──
+// расширительный бак до насоса с предохранительным клапаном, сетчатый фильтр, краны по обе стороны
+// насоса, манометры, автоматический воздухоотводчик в верхней точке возврата.
+{
+  const g = "glycol";
+  const routeOf = (line) => R.tubes.filter((tube) => tube.name === line.owner);
+  const alongAt = (line, x) => {
+    let best = 0;
+    let bestD = Infinity;
+    for (let a = 0; a <= line.total; a += 0.05) {
+      const d = Math.abs(G.pointAlong(line, a)[0] - x) + Math.abs(G.pointAlong(line, a)[2] - LANE.z) * 4;
+      if (d < bestD) [best, bestD] = [a, d];
+    }
+    return best;
+  };
+  void alongAt;
+  // краны по обе стороны насоса (рукоятка вдоль трубы — открыт) и сетчатый фильтр перед насосом
+  ballValveOn("glycol", "glycol.valve.in", OUT.supplyDry, AT.valveIn, LANE.r, { lever: [1, 0, 0], group: g });
+  ballValveOn("glycol", "glycol.valve.out", OUT.supplyRoom, AT.valveOut, LANE.r, { lever: [1, 0, 0], group: g });
+  strainerOn("glycol", "glycol.strainer", OUT.supplyDry, AT.strainer, LANE.r, { leg: [0, 0.8, -0.6], group: g });
+  // манометры: на всасывании насоса и на возврате у драйкулера
+  gaugeOn("glycol", "glycol.gauge.in", routeOf(OUT.supplyDry), [HYD.gaugeIn, LANE.S, LANE.z + LANE.r - 0.1], { group: g, owner: OUT.supplyDry.owner });
+  gaugeOn("glycol", "glycol.gauge.ret", routeOf(OUT.returnRoom), [HYD.gaugeRet, LANE.R, HEADER.in.z + LANE.r - 0.1], { group: g, owner: OUT.returnRoom.owner });
+  // автоматический воздухоотводчик в верхней точке возврата
+  {
+    const top = padOn("glycol", "glycol.vent.boss", routeOf(OUT.returnRoom), [HYD.vent, LANE.R, HEADER.in.z + LANE.r - 0.1], [0, 0, 1], 1.1, 0.6, { tone: "mid" }, { owner: OUT.returnRoom.owner, group: g });
+    const VF = G.frameOf(top, [0, 0, 1], [1, 0, 0], [0, 1, 0]);
+    turned("glycol", "glycol.vent", VF, [[0, 1.6], [3.6, 1.6], [4.2, 1.1], [5.2, 1.1]], { tone: "hi" }, { owner: OUT.returnRoom.owner, group: g, extra: Ln(G.circleOf(VF, 1.8, 1.6, P, 24), { tone: "faint" }) });
+  }
+  // мембранный расширительный бак на всасывании насоса: отвод с площадки на трубе, бак на опоре
+  {
+    const TK = { x: HYD.tank, y: 78, z0: 4.4, h: 22, R: 5, dome: 3 };
+    const TF = G.frameOf([TK.x, TK.y, TK.z0], [0, 0, 1], [1, 0, 0], [0, 1, 0]);
+    const steps = 8;
+    const profile = [];
+    for (let i = 0; i <= steps; i++) {
+      const t = (i / steps) * (Math.PI / 2);
+      profile.push([TK.dome * (1 - Math.cos(t)), Math.max(0.05, TK.R * Math.sin(t))]);
+    }
+    for (let i = steps; i >= 0; i--) {
+      const t = (i / steps) * (Math.PI / 2);
+      profile.push([TK.h - TK.dome * (1 - Math.cos(t)), Math.max(0.05, TK.R * Math.sin(t))]);
+    }
+    const tank = turned("glycol", "glycol.tank", TF, profile, { tone: "hi" }, { owner: "glycol.tank", group: g, extra: Ln(G.circleOf(TF, TK.h * 0.42, TK.R, P, 48), { tone: "faint" }) });
+    padOn("glycol", "glycol.tank.foot", tank, [TK.x, TK.y, TK.z0 + 0.05], [0, 0, -1], 3.4, TK.z0 - PAD_H, { tone: "lo" }, { owner: "glycol.tank", group: g });
+    const relief = padOn("glycol", "glycol.relief.boss", tank, [TK.x, TK.y, TK.z0 + TK.h - 0.05], [0, 0, 1], 0.9, 0.5, { tone: "mid" }, { owner: "glycol.tank", group: g });
+    turned("glycol", "glycol.relief", G.frameOf(relief, [0, 0, 1], [1, 0, 0], [0, 1, 0]), [[0, 1.3], [2.6, 1.3], [3, 0.8], [4.4, 0.8]], { tone: "hi" }, { owner: "glycol.tank", group: g });
+    const from = padOn("glycol", "glycol.tank.tee", routeOf(OUT.supplyDry), [TK.x, LANE.S + LANE.r - 0.1, LANE.z], [0, 1, 0], 1.3, 0.8, { tone: "mid" }, { owner: OUT.supplyDry.owner, group: g });
+    const to = padOn("glycol", "glycol.tank.boss", tank, [TK.x, TK.y - TK.R + 0.1, LANE.z], [0, -1, 0], 1.3, 0.6, { tone: "mid" }, { owner: "glycol.tank", group: g });
+    pipe("glycol", "glycol.tank.line", [from, to], 0.9, { group: g, flanges: [false, false], tone: "mid" });
+  }
+}
 
 
 // ── Сборка порядка и страницы ───────────────────────────────────────
@@ -994,9 +1191,11 @@ RACKS.forEach((rack, k) => {
     [xk, -40, zk],
     [xk, -76, zk],
     [xk, -86, zk + 10],
-    [xk, -86, 128],
-    [xk + 20, -70, 136],
-    [gx - 14, gy - 26, 138],
+    [xk, -86 + [-4, 0, 4][k], 128],
+    [xk, -86 + [-4, 0, 4][k], 141],
+    [-68 + [-4, 0, 4][k], -86 + [-4, 0, 4][k], 141],
+    [-68 + [-4, 0, 4][k], 30, 141],
+    [gx, gy, 141],
   ];
   const pts = smoothAir([...raw, raw[0]]).slice(0, -1);
   const loop = [...pts, pts[0]];
@@ -1056,7 +1255,7 @@ FANS.forEach((fan, index) => {
 // Потоки в свободном воздухе (узел: x, y, z, радиус) и заместители деталей, которые их закрывают.
 // Шейдер собирается здесь же: числа геометрии попадают в него литералами, без массивов uniform.
 const AIR_STREAMS = [];
-const stream = (group, kind, nodes, radius = 9) => AIR_STREAMS.push({ group, kind, nodes: radius ? filletAir(nodes, radius) : nodes });
+const stream = (group, kind, nodes, radius = 9) => AIR_STREAMS.push({ group, kind, nodes: radius ? filletAir(nodes, radius) : nodes.map((n) => [n[0], n[1], n[2], n[3], n[4] ?? 1, n[5] ?? "uTs", n[5] ?? "uTs", 0]) });
 // скругление ломаной с интерполяцией радиуса трубки
 function filletAir(nodes, radius) {
   const pts = G.fillet(nodes.map((n) => n.slice(0, 3)), radius, 3);
@@ -1073,25 +1272,58 @@ function filletAir(nodes, radius) {
     const t = Math.min(1, Math.max(0, (s - cum[j - 1]) / (cum[j] - cum[j - 1] || 1)));
     const m0 = nodes[j - 1][4] ?? 1;
     const m1 = nodes[j][4] ?? 1;
-    return [...p, nodes[j - 1][3] + (nodes[j][3] - nodes[j - 1][3]) * t, m0 + (m1 - m0) * t];
+    // температура: выражения двух соседних исходных узлов и доля между ними
+    return [...p, nodes[j - 1][3] + (nodes[j][3] - nodes[j - 1][3]) * t, m0 + (m1 - m0) * t, nodes[j - 1][5] ?? "uTs", nodes[j][5] ?? "uTs", t];
   });
 }
-// подполье: от кондиционера вдоль открытого выреза к стойкам
-stream("plenum", 0, [[-97, 66, 11, 0], [-110, 66, 11, 6.5], [-150, 65, 11, 7], [-205, 64, 11, 7], [-246, 61, 11, 4.5], [-262, 58, 11, 0]], 14);
+// Температуры узлов — выражения GLSL: uTs подача, uTr возврат, uTb между рядами теплообменника,
+// uTo наружный воздух, uTe воздух после драйкулера. Цвет воздуха считает шейдер по температуре.
+const TS = "uTs";
+const TR = "uTr";
+// кондиционер: из переходного короба вниз через фильтр и ряды теплообменника, вентилятор, подполье
+stream("crac", 0, [
+  [-68, 40, 139, 6, 1, TR],
+  [-70, 56, 128, 10, 1, TR],
+  [-71, 56, 118, 13, 1, TR],
+  [-72, 56, 108, 14, 1, TR],
+  [-72, 56, 96, 14, 1, "mix(uTr,uTb,.5)"],
+  [-72, 56, 83, 14, 1, "uTb"],
+  [-72, 56, 70, 14, 1, "mix(uTb,uTs,.5)"],
+  [-74, 56, 59, 13, 1, TS],
+  [-77, 56, 48, 12, 1, TS],
+  [-78, 58, 33, 11, 1, TS],
+  [-84, 62, 18, 9, 1, TS],
+  [-98, 66, 11, 7, 1, TS],
+  [-110, 66, 11, 6.5, 1, TS],
+  [-150, 65, 11, 7, 1, TS],
+  [-205, 64, 11, 7, 1, TS],
+  [-246, 61, 11, 4.5, 1, TS],
+  [-262, 58, 11, 0, 1, TS],
+], 10);
 RACKS.forEach((rack, k) => {
   const xk = rack.x0 + 15;
   const zk = SERVER_Z[SERVER_OF[k]] + SERVER_H / 2;
-  const gx = [-84, -71, -58][k];
-  const gy = [48, 58, 68][k];
+  const o = [-4, 0, 4][k];
   // холодный коридор: из перфорированной плиты вверх к лицевым панелям
-  stream("aisle", 0, [[xk, 6, F + 0.5, 0, 1], [xk, 5, F + 9, 11, 1], [xk, 1, F + 48, 12, 0.72], [xk, -5, F + 86, 9, 0.42], [xk, -7.5, F + 100, 0, 0.3]], 0);
-  // горячий коридор: из задних панелей вверх, над стойками к верхнему входу кондиционера
-  stream("hot", 1, [[xk, rack.y0 - 3, zk, 0], [xk, -82, zk + 10, 7], [xk, -86, F + 100, 10], [xk + 4, -84, 132, 11, 0.9], [xk + 22, -66, 140, 10, 0.62], [gx - 14, gy - 26, 140, 9, 0.5], [gx, gy, 130, 8, 0.5], [gx, gy, CRAC.z1 - 1, 0, 0.5]], 10);
+  stream("aisle", 0, [[xk, 6, F + 0.5, 0, 1, TS], [xk, 5, F + 9, 11, 1, TS], [xk, 1, F + 48, 12, 0.72, TS], [xk, -5, F + 86, 9, 0.42, TS], [xk, -7.5, F + 100, 0, 0.3, TS]], 0);
+  // горячий коридор: из задних панелей вверх в колпак, по каналу к переходному коробу
+  stream("hot", 1, [
+    [xk, rack.y0 - 3, zk, 0, 1, TR],
+    [xk, -82, zk + 10, 7, 1, TR],
+    [xk, -86, F + 100, 9, 1, TR],
+    [xk, -86 + o, 137, 7, 0.95, TR],
+    [-150, -86 + o, 141, 5.5, 0.85, TR],
+    [-68 + o, -86 + o, 141, 5.5, 0.85, TR],
+    [-68 + o, 20, 141, 5.5, 0.85, TR],
+    [-68 + o, 38, 140, 5.5, 0.85, TR],
+    [-68, 44, 136, 0, 0.8, TR],
+  ], 10);
 });
 FANS.forEach((fan) => {
-  stream("intake", 2, [[fan.x - 4, fan.y + 40, 2.5, 0, 0.8], [fan.x - 2, fan.y + 24, 12, 9, 1], [fan.x, fan.y + 6, 28, 12, 1], [fan.x, fan.y, DRY.legTop + 1, 0, 1]], 10);
-  stream("exhaust", 3, [[fan.x, fan.y, FAN.top - 1, 0, 0.25], [fan.x, fan.y, FAN.top + 8, 15, 0.7], [fan.x + 3, fan.y + 2, 102, 18, 1], [fan.x + 7, fan.y + 4, 124, 20, 0.85], [fan.x + 9, fan.y + 5, 134, 0, 0.6]], 12);
+  stream("intake", 2, [[fan.x - 4, fan.y + 40, 2.5, 0, 0.8, "uTo"], [fan.x - 2, fan.y + 24, 12, 9, 1, "uTo"], [fan.x, fan.y + 6, 28, 12, 1, "uTo"], [fan.x, fan.y, DRY.legTop + 1, 0, 1, "uTo"]], 10);
+  stream("exhaust", 3, [[fan.x, fan.y, FAN.top - 1, 0, 0.25, "uTe"], [fan.x, fan.y, FAN.top + 8, 15, 0.7, "uTe"], [fan.x + 3, fan.y + 2, 102, 18, 1, "uTe"], [fan.x + 7, fan.y + 4, 124, 20, 0.85, "uTe"], [fan.x + 9, fan.y + 5, 134, 0, 0.6, "uTe"]], 12);
 });
+
 const GL = (v) => {
   const s = (Math.round(v * 1000) / 1000).toString();
   return s.includes(".") || s.includes("e") ? s : `${s}.`;
@@ -1111,7 +1343,8 @@ AIR_STREAMS.forEach(({ group, kind, nodes }, index) => {
     const [a, b] = [nodes[i - 1], nodes[i]];
     const length = G.len3(G.sub3(b.slice(0, 3), a.slice(0, 3)));
     if (length < 1e-3) continue;
-    if (Math.max(a[3], b[3]) > 0.05) segs.push(`seg(acc,p0,V,tF,${V3(a)},${V3(b)},vec3(${GL(a[3])},${GL(b[3])},${GL(s)}),vec2(${GL(a[4] ?? 1)},${GL(b[4] ?? 1)}));`);
+    const tempOf = (n) => (n[5] === n[6] ? n[5] : `mix(${n[5]},${n[6]},${GL(n[7])})`);
+    if (Math.max(a[3], b[3]) > 0.05) segs.push(`seg(acc,acc2,p0,V,tF,${V3(a)},${V3(b)},vec3(${GL(a[3])},${GL(b[3])},${GL(s)}),vec2(${GL(a[4] ?? 1)},${GL(b[4] ?? 1)}),vec2(${tempOf(a)},${tempOf(b)}));`);
     s += length;
     for (const n of [a, b]) for (let k2 = 0; k2 < 3; k2++) (lo[k2] = Math.min(lo[k2], n[k2] - 2 * n[3] - 1)), (hi[k2] = Math.max(hi[k2], n[k2] + 2 * n[3] + 1));
   }
@@ -1119,9 +1352,9 @@ AIR_STREAMS.forEach(({ group, kind, nodes }, index) => {
   const phase = kind < 2 ? "uPhase.x" : "uPhase.y";
   const seed = GL(index * 3.7 + 1.3);
   airStreamCode.push({ group, lo, hi, code: `  if(hitBox(p0,V,${V3(lo)},${V3(hi)})){
-    acc=vec4(0.);
+    acc=vec4(0.);acc2=vec4(0.);
     ${segs.join("\n    ")}
-    d${kind}=max(d${kind},finish(acc,${phase},${seed},px));
+    col=over(stream(acc,acc2,${phase},${seed},px,uLevel.${"xyzw"[kind]}),col);
   }` });
 });
 const AIR_GROUPS = [...new Set(airStreamCode.map((part) => part.group))].map((group) => {
@@ -1172,7 +1405,15 @@ SCENE3D.centre = [f2((BASE.x * 2 + BASE.w) / 2), f2((BASE.y * 2 + BASE.d) / 2), 
 SCENE3D.base = { x: BASE.x, y: BASE.y, w: BASE.w, d: BASE.d, z0: -BASE_H - FOOT_H };
 SCENE3D.camera.view = [W, H];
 console.log(`3d: ${SCENE3D.items.length} items, lines ${SCENE3D.stats.lines} (${SCENE3D.stats.points} points, dropped ${SCENE3D.stats.dropped}), dots ${SCENE3D.stats.dots}, fills ${SCENE3D.stats.fills}, ${(JSON.stringify(SCENE3D).length / 1024).toFixed(0)} KB`);
-const DATA = { flows: FLOWS, steps: STEPS, wheel: WHEEL, air: AIR_GL, scene: SCENE3D };
+// Индикаторы 3D-вида: светодиоды серверов и контроллера, полосы режима на экране контроллера.
+// Координаты те же, что у точек рисунка (servers: питание и активность; ctrl: питание, фрикулинг, компрессор, насос).
+const CTRL3D = { x0: -24, y: CRAC.y1 - 1, z0: 104 };
+const LAMPS = {
+  servers: RACKS.flatMap((rack) => SERVER_Z.map((z) => [[rack.x1 - 8, rack.y1 - 2.2, z + 5.6], [rack.x1 - 6.6, rack.y1 - 2.2, z + 5.6]].map((p) => p.map(f2)))),
+  ctrl: [[CTRL3D.x0 + 3, CTRL3D.y, CTRL3D.z0 + 3], ...[14.4, 17, 19.6].map((dx) => [CTRL3D.x0 + dx, CTRL3D.y, CTRL3D.z0 + 9.4])].map((p) => p.map(f2)),
+  screen: [11, 9.4, 7.8].map((dz) => Array.from({ length: 7 }, (_, i) => [f2(CTRL3D.x0 + 3.6 + i * 1.12), CTRL3D.y, f2(CTRL3D.z0 + dz)])),
+};
+const DATA = { flows: FLOWS, steps: STEPS, wheel: WHEEL, air: AIR_GL, scene: SCENE3D, lamps: LAMPS };
 
 // --explode: проходят ли детали друг сквозь друга в кадрах разборки. Те же часы, что на странице
 // (общая разборка: узлы по очереди, сборка в обратном порядке; разборка одного узла), шаг 1/30 с;
@@ -1259,14 +1500,16 @@ const swatch = (inner) => `<svg class="dc-swatch" viewBox="0 0 30 10" aria-hidde
 const dotRow = (cls, tag) => [5, 15, 25].map((x) => `<circle cx="${x}" cy="5" r="2.6" data-t="${tag}"/>`).join("");
 // дымка в легенде: та же краска, что у воздуха в шейдере (светлая тема), с мягкими краями
 const haze = (id, rgb, a) => swatch(`<defs><linearGradient id="${id}" x1="0" x2="1"><stop offset="0" stop-color="rgb(${rgb})" stop-opacity="0"/><stop offset=".3" stop-color="rgb(${rgb})" stop-opacity="${a}"/><stop offset=".7" stop-color="rgb(${rgb})" stop-opacity="${a}"/><stop offset="1" stop-color="rgb(${rgb})" stop-opacity="0"/></linearGradient></defs><rect x="0" y="1" width="30" height="8" rx="4" fill="url(#${id})"/>`);
+// шкала цвета воздуха: те же опорные точки, что у tcol() в scene3d.js (−8, 21, 26, 31, 46 °C)
+const AIR_RAMP = swatch(`<defs><linearGradient id="dc-hz-t" x1="0" x2="1"><stop offset="0" stop-color="rgb(33,77,179)" stop-opacity=".55"/><stop offset=".35" stop-color="rgb(69,140,230)" stop-opacity=".55"/><stop offset=".55" stop-color="rgb(189,168,148)" stop-opacity=".55"/><stop offset=".75" stop-color="rgb(237,153,61)" stop-opacity=".55"/><stop offset="1" stop-color="rgb(237,97,36)" stop-opacity=".55"/></linearGradient></defs><rect x="0" y="1" width="30" height="8" rx="4" fill="url(#dc-hz-t)"/>`);
+const LAMP_KEY = swatch(`<circle cx="5" cy="5" r="2.4" fill="rgb(51,133,242)"/><circle cx="15" cy="5" r="2.4" fill="rgb(245,153,31)"/><circle cx="25" cy="5" r="2.4" fill="rgb(41,179,87)"/>`);
 const legend = [
-  ["Холодный воздух зала — голубая дымка: из подполья через плиты к лицевым панелям", haze("dc-hz-c", "92,158,230", 0.5), "dc-only3d"],
-  ["Тёплый воздух — охристая дымка: за стойками и к верхнему входу кондиционера", haze("dc-hz-w", "230,158,77", 0.44), "dc-only3d"],
+  ["Воздух — дымка цвета своей температуры: синий — мороз, голубой — подача 22 °C, песочный — около 25 °C, охристый и оранжевый — горячий. Волны бегут по направлению потока", AIR_RAMP, "dc-only3d"],
   ["Смесь в трубах: голубые точки на подаче, охристые на возврате", swatch(`<g class="mk" data-kind="air"><circle cx="5" cy="5" r="2.6" data-t="c"/><circle cx="15" cy="5" r="2.6" data-t="c"/><circle cx="25" cy="5" r="2.6" data-t="w"/></g>`), "dc-only3d"],
   ["Холодный поток: воздух под полом и в холодном коридоре, смесь на подаче", swatch(`<g class="mk" data-kind="air">${dotRow("", "c")}</g>`), "dc-only2d"],
   ["Тёплый поток: воздух за стойками, смесь на возврате", swatch(`<g class="mk" data-kind="air">${dotRow("", "w")}</g>`), "dc-only2d"],
   ["Хладагент (нейтральные кольца)", swatch(`<g class="mk" data-kind="ref">${dotRow("", "n")}</g>`), ""],
-  ["Наружный воздух — только через драйкулер", haze("dc-hz-o", "107,163,224", 0.5), "dc-only3d"],
+  ["Лампы контроллера: фрикулинг, компрессор, насос; полосы на экране — доли режимов и скорость вентиляторов драйкулера", LAMP_KEY, "dc-only3d"],
   ["Наружный воздух — только через драйкулер", swatch(`<g class="mk" data-kind="outdoor"><circle cx="5" cy="5" r="2.6" data-t="c"/><circle cx="15" cy="5" r="2.6" data-t="c"/><circle cx="25" cy="5" r="2.6" data-t="w"/></g>`), "dc-only2d"],
   ["Выбранный узел — тёмный контур", swatch(`<path d="M2 8 L14 2 L28 8" fill="none" stroke="#000" stroke-width="1.2"/>`), ""],
 ];
@@ -1286,17 +1529,18 @@ const BODY = `
           <div class="iso-plate-corners" aria-hidden="true">
             <span class="iso-plate-corner" data-corner="fig">Рис. 1</span>
             <span class="iso-plate-corner" data-corner="title">Зал · улица</span>
-            <span class="iso-plate-corner" data-corner="hint"><span class="dc-wide dc-only3d">Тяните — вращение · X — разобрать · 1–5 · R</span><span class="dc-narrow dc-only3d">Тяните — вращение · 1–5</span><span class="dc-wide dc-only2d">Нажмите на узел · 1–5 · ← → · пробел · R</span><span class="dc-narrow dc-only2d">Нажмите на узел · 1–5</span></span>
+            <span class="iso-plate-corner" data-corner="hint"><span class="dc-wide dc-only3d">Тяните — вращение · X — разборка · F — экран · 1–5</span><span class="dc-narrow dc-only3d">Тяните — вращение · 1–5</span><span class="dc-wide dc-only2d">Нажмите на узел · 1–5 · ← → · F — экран · R</span><span class="dc-narrow dc-only2d">Нажмите на узел · 1–5</span></span>
             <span class="iso-plate-corner" data-corner="readout" data-readout></span>
           </div>
-          <div class="dc-viewport" tabindex="0" role="group" aria-label="Разрез установки. Тяните, чтобы вращать сцену; Q и E поворачивают, W и S меняют наклон, X разбирает выбранный узел или всю установку на детали. Нажмите на стойки, кондиционер, трубы или драйкулер, чтобы выбрать узел. Escape возвращает обычный масштаб.">
+          <button class="dc-full" type="button" data-act="full-icon" aria-label="Во весь экран (F)" title="Во весь экран (F)"><svg viewBox="0 0 16 16" aria-hidden="true"><path class="dc-full-in" d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/><path class="dc-full-out" d="M6 2v4H2M14 6h-4V2M10 14v-4h4M2 10h4v4"/></svg></button>
+          <div class="dc-viewport" tabindex="0" role="group" aria-label="Разрез установки. Тяните, чтобы вращать сцену; Q и E поворачивают, W и S меняют наклон, X разбирает выбранный узел или всю установку на детали, F разворачивает рисунок на весь экран. Нажмите на стойки, кондиционер, трубы или драйкулер, чтобы выбрать узел. Escape возвращает обычный масштаб и выходит из полного экрана.">
             <div class="dc-zoomer">${svg}<canvas class="dc-view3d" aria-hidden="true"></canvas></div>
           </div>
           <p class="dc-sr" role="status" aria-live="polite" data-status></p>
         </div>
         <figcaption class="dc-legend">
           ${legend.map(([label, mark, cls]) => `<span class="dc-key${cls ? ` ${cls}` : ""}">${mark}${label}</span>`).join("")}
-          <span class="dc-key dc-cond">Скорость маркеров, движения воздуха и вращения вентиляторов условная; показана только качественно. Плотность дымки тоже условная: тёплый воздух гуще при большей нагрузке, наружный — при большей интенсивности вентиляторов.</span>
+          <span class="dc-key dc-cond">Скорость маркеров, движения воздуха и вращения вентиляторов условная; показана только качественно. Плотность дымки тоже условная: тёплый воздух гуще при большей нагрузке, наружный — при большей интенсивности вентиляторов. Цвет дымки берётся из температур модели.</span>
         </figcaption>
       </figure>
       <section class="dc-box dc-explain" aria-live="off">
@@ -1360,6 +1604,7 @@ const BODY = `
           <button class="dc-btn" type="button" data-act="tour" aria-pressed="false">Автопоказ</button>
           <button class="dc-btn" type="button" data-act="pause" aria-pressed="false">Пауза</button>
           <button class="dc-btn" type="button" data-act="zoom" aria-pressed="false">Увеличить ×1.6</button>
+          <button class="dc-btn" type="button" data-act="full" aria-pressed="false">Во весь экран</button>
           <button class="dc-btn" type="button" data-act="reset">Сброс</button>
         </div>
         <div class="dc-buttons dc-view-buttons dc-only3d" role="group" aria-label="Вид">
@@ -1367,14 +1612,18 @@ const BODY = `
           <button class="dc-btn" type="button" data-act="turn-right" aria-label="Повернуть сцену вправо на 30°">↻ 30°</button>
           <button class="dc-btn" type="button" data-act="explode" aria-pressed="false">Разобрать</button>
         </div>
-        <p class="dc-hint">Клавиши: 1–5 — узлы, ← → — шаги, пробел — пауза, R — сброс, Escape — обычный масштаб.<span class="dc-only3d"> Q / E — поворот, W / S — наклон, X — разобрать или собрать (выбранный узел или всю установку); мышью: тянуть — вращение, Shift или правая кнопка — сдвиг.</span> Ползунки слушают стрелки сами.</p>
+        <p class="dc-hint">Клавиши: 1–5 — узлы, ← → — шаги, пробел — пауза, R — сброс, F — во весь экран, Escape — обычный масштаб и выход из полного экрана.<span class="dc-only3d"> Q / E — поворот, W / S — наклон, X — разобрать или собрать (выбранный узел или всю установку); мышью: тянуть — вращение, Shift или правая кнопка — сдвиг.</span> Ползунки слушают стрелки сами.</p>
       </section>
     </aside>
   </div>
   <details class="dc-details">
     <summary>Что принято в этой учебной модели</summary>
     <ul>
-      <li><b>3D-вид.</b> Сцена вращается и разбирается в браузере на WebGL. Меши строятся из тех же форм деталей, что проверяет аудит Anatomy (призмы, тела вращения, трубы), линии и винты рисунка перенесены на поверхности деталей; разлёт деталей — иллюстрация состава узлов, а не порядок реального монтажа. Без WebGL страница показывает изометрический SVG-рисунок.</li>
+      <li><b>3D-вид.</b> Сцена вращается, разбирается и разворачивается на весь экран (кнопка в углу рисунка или F) в браузере на WebGL. Меши строятся из тех же форм деталей, что проверяет аудит Anatomy (призмы, тела вращения, трубы), линии и винты рисунка перенесены на поверхности деталей; разлёт деталей — иллюстрация состава узлов, а не порядок реального монтажа. Оттенки меди и латуни, контактные тени и светодиоды — оформление, а не паспортные цвета. Без WebGL страница показывает изометрический SVG-рисунок.</li>
+      <li><b>Путь воздуха сверен с руководствами.</b> Перфорированные плиты стоят только в холодном коридоре, стойки обращены к нему лицевыми панелями, горячий воздух выходит назад и возвращается к кондиционеру; кондиционер ставят в конце горячего коридора или подводят к нему возврат через верхний канал. На сцене горячий коридор закрыт колпаком, воздух идёт по каналу в верхний вход кондиционера, через фильтр и ряды теплообменника вниз, вентилятором в подполье. Вентилятор внизу блока соответствует исполнению с подачей вниз (в HPM Extended DOWN модуль вентиляторов стоит в фальшполу).</li>
+      <li><b>Цвет воздуха следует из модели.</b> Подача 22 °C, возврат T_return, воздух между рядами T_between: в фрикулинге воздух остывает уже в рядах фрикулинга, в компрессорном режиме — только в рядах испарителя. Воздух за драйкулером в балансе не участвует; его нагрев показан при условном расходе 10 кВт/К на полной скорости вентиляторов (с замедлением вентиляторов нагрев растёт), но не выше температуры горячей смеси. Сквозь рёбра теплообменников, фильтр и крыльчатку поток виден наполовину.</li>
+      <li><b>Режимы видны в движении.</b> В фрикулинге хладагент стоит и компрессорная лампа погашена; в мороз вентиляторы драйкулера замедляются (регулирование теплоотдачи). В смешанном режиме работают обе ветки смеси и холодильный контур, в компрессорном смесь идёт только через конденсатор. Светодиоды активности серверов мигают чаще при большей нагрузке.</li>
+      <li><b>Арматура показана по типовым схемам:</b> в холодильном контуре ресивер, фильтр-осушитель, смотровое стекло и терморегулирующий клапан; в контуре смеси запорные краны, сетчатый фильтр, манометры, автоматический воздухоотводчик в высокой точке, расширительный бак с предохранительным клапаном на линии к насосу. Места установки обобщены.</li>
       <li><b>Почему HPM F.</b> Принцип исполнения F (Freecooler) взят из руководства Vertiv Liebert HPM A/W/F/D/H, редакция 23.01.2018, раздел 2.1.4, с учётом соседнего 2.1.3 (W): один теплообменник с рядами фрикулинга и рядами прямого испарения, внешний драйкулер, водно-гликолевая смесь, насос и смесь в поставку блока не входят, двухходовой регулирующий клапан (12) на теплообменнике фрикулинга и соленоидный клапан (13) на водяном пластинчатом конденсаторе. Модель выбрана условно: название Liebert Hiross само по себе не определяет модель и комплектацию.</li>
       <li><b>Геометрия обобщённая.</b> Размеры, расположение узлов, число серверов, трассы труб, опоры и насос нарисованы для объяснения принципа и не повторяют конкретную установку. Ряды фрикулинга и испарителя показаны двумя блоками; конфигурация подачи вниз под фальшпол (Downflow) есть в руководстве как вариант U.</li>
       <li><b>Режим следует из баланса.</b> В руководстве переход описан правилом «улица хотя бы на 5 градусов холоднее возвратного воздуха» и температурой ZET. Здесь режим не переключается по порогу: он получается из совместного решения уравнений, а крайние режимы определяются с допуском 0,001 кВт.</li>
@@ -1383,7 +1632,7 @@ const BODY = `
       <li><b>Не учтены</b> тепло вентиляторов и насоса, влажность и осушение, гидравлика и перепады давления. Деление расхода смеси между ветками в анимации пропорционально их тепловой нагрузке — для наглядности.</li>
       <li><b>Время условно.</b> Плавная смена картинки после движения ползунка не моделирует реальную длительность переходного процесса. Скорости маркеров и вращения вентиляторов условные; интенсивность вентиляторов драйкулера — доля использованного UA, а не обороты или настройки контроллера.</li>
       <li><b>Драйкулер без орошения</b> — допущение сцены: теплообмен с наружным воздухом только сухой.</li>
-      <li><b>Источники:</b> <a href="https://www.vertiv.com/48d574/globalassets/products/thermal-management/room-cooling/vertiv-liebert-hpm/vertiv-liebert_hpm-um-en-emea-265011.pdf">Vertiv Liebert HPM A/W/F/D/H User Manual, ред. 23.01.2018 (PDF), разделы 2.1.3 и 2.1.4</a>; <a href="https://www.vertiv.com/en-us/products-catalog/thermal-management/heat-rejection/liebert-hpd/">Liebert HPD — наружный сухой охладитель, страница каталога Vertiv</a>. Проверено 11.10.2026; документы производителя могут обновляться.</li>
+      <li><b>Источники:</b> <a href="https://www.vertiv.com/48d574/globalassets/products/thermal-management/room-cooling/vertiv-liebert-hpm/vertiv-liebert_hpm-um-en-emea-265011.pdf">Vertiv Liebert HPM A/W/F/D/H User Manual, ред. 23.01.2018 (PDF), разделы 2.1.3 и 2.1.4</a>; <a href="https://www.vertiv.com/en-us/products-catalog/thermal-management/heat-rejection/liebert-hpd/">Liebert HPD — наружный сухой охладитель, страница каталога Vertiv</a>; <a href="https://planetaklimata.com.ua/instr/Liebert_Hiross/Liebert_HPM_Extended_Technical_manual_Eng.pdf">Liebert HPM Extended, техническое руководство 273541 (2010): исполнения DOWN и UP</a>; <a href="https://www.ibm.com/docs/en/cloudpakw3700/2.3.3?topic=determination-general-guidelines-data-centers">IBM: общие правила для ЦОД — горячие и холодные коридоры, место кондиционеров</a>; <a href="https://www.vertiv.com/4963d0/globalassets/shared/focused-cooling-using-cold-aisle-contaiment.pdf">Vertiv: Focused Cooling Using Cold Aisle Containment — кондиционеры в конце горячих коридоров или возврат через верхний канал</a>; <a href="https://www.manualsdir.com/manuals/169140/liebert-precision-cooling-system-ds.html?page=96">Liebert DS, схема трубопроводов GLYCOOL: бак, воздухоотводчики, запорная арматура, фильтр-осушитель, смотровое стекло</a>; <a href="https://www.manualslib.com/manual/2821465/Ecosaire-En-Series.html?page=35">Ecosaire EN Series, раздел трубопроводов смеси: бак до насоса, воздухоотводчик в высокой точке, фильтр 16–20 mesh, манометры</a>; <a href="https://www.evapco.com/products/closed-circuit-coolers-air-cooled/eaw-fd-flat-dry-cooler">EVAPCO EAW-FD: вентиляторы сверху протягивают наружный воздух через теплообменник</a>. Проверено 11.10.2026; документы производителей могут обновляться.</li>
     </ul>
   </details>
   <p class="dc-foot">Иллюстрация построена на ките Anatomy (лицензия MIT, © 2026 Ryan). Полный текст лицензии — в комментарии в начале файла.</p>

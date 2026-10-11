@@ -140,8 +140,9 @@ export const UNITS = [
     unit: [0, 0, 26],
     order: 1,
     parts: [
-      ["crac.roof", up(50)],
-      ["crac.filter", up(32)],
+      // крыша и фильтр выдвигаются вперёд из-под переходного короба канала (обслуживание спереди)
+      ["crac.roof", () => [0, 64, 0]],
+      ["crac.filter", () => [0, 50, 0]],
       ["crac.coil.", () => [0, 56, 0]],
       ["crac.fan.beam", () => [0, 0, 0]],
       ["crac.fan.", () => [0, 60, 0]],
@@ -152,6 +153,8 @@ export const UNITS = [
       ["crac.bphe", () => [20, 0, 0]],
     ],
   },
+  // крайняя опора канала стоит у торца стойки 1: при подъёме канала она отходит в сторону, чтобы стойки прошли назад
+  { id: "duct", title: "Канал возврата", match: (n) => n.startsWith("duct."), unit: [0, 0, 70], order: -1, parts: [["duct.post", (item) => (item.b[0] < -240 ? [-16, 0, 0] : [0, 0, 0])]] },
   { id: "pipes", title: "Трубы", match: (n) => n.startsWith("glycol."), unit: [0, 0, 0], order: 6, parts: [] },
   {
     id: "pump",

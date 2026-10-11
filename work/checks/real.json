@@ -1,0 +1,8 @@
+[
+  ["wait", 6000],
+  ["eval", "JSON.stringify(window.__dc3d.stats)"],
+  ["shot", "shots/3d/real-page.png", ".dc-card .iso-plate", 1],
+  ["shot", "shots/3d/real-hyd.png", ".dc-card .iso-plate", 2.5, [380, 330, 260, 190]],
+  ["shot", "shots/3d/real-dry.png", ".dc-card .iso-plate", 2, [560, 300, 280, 260]],
+  ["shot", "shots/3d/real-crac.png", ".dc-card .iso-plate", 3, [300, 230, 150, 150]]
+]

@@ -1,0 +1,6 @@
+[
+  ["wait", 1500],
+  ["key", " ", ".dc-viewport"],
+  ["wait", 20000],
+  ["eval", "new Promise((done) => { const a = window.__dcFrames; setTimeout(() => done('3D пауза через 20 с: кадров за 2 с: ' + (window.__dcFrames - a) + ' · воздух ' + Array.from(window.__dc3d.st.air.levels).map((v) => v.toFixed(3)).join(' ')), 2000); })"]
+]

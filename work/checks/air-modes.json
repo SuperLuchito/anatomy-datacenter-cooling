@@ -1,0 +1,14 @@
+[
+  ["wait", 6000],
+  ["click", "[data-preset=\"-10\"]"],
+  ["wait", 3500],
+  ["shot", "shots/3d/air-free.png", ".dc-card .iso-plate", 1],
+  ["shot", "shots/3d/air-free-crac.png", ".dc-card .iso-plate", 2, [200, 100, 300, 300]],
+  ["click", "[data-preset=\"20\"]"],
+  ["wait", 3500],
+  ["shot", "shots/3d/air-mixed.png", ".dc-card .iso-plate", 1],
+  ["click", "[data-preset=\"35\"]"],
+  ["wait", 3500],
+  ["shot", "shots/3d/air-comp.png", ".dc-card .iso-plate", 1],
+  ["shot", "shots/3d/air-comp-crac.png", ".dc-card .iso-plate", 2, [200, 100, 300, 300]]
+]

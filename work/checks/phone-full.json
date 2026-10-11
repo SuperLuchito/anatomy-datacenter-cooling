@@ -1,0 +1,8 @@
+[
+  ["wait", 6000],
+  ["shot", "shots/3d/phone.png", ".dc-card", 1],
+  ["click", "[data-act=\"full-icon\"]"],
+  ["wait", 1500],
+  ["eval", "JSON.stringify({w: innerWidth, sw: document.documentElement.scrollWidth, canvas: [document.querySelector('.dc-view3d').clientWidth, document.querySelector('.dc-view3d').clientHeight]})"],
+  ["shot", "shots/3d/phone-full.png", ".dc-layout", 1]
+]
