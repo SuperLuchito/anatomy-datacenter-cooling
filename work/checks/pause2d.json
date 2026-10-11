@@ -1,0 +1,9 @@
+[
+  ["wait", 1500],
+  ["key", " ", ".dc-viewport"],
+  ["eval", "'пауза: ' + document.querySelector('[data-act=pause]').getAttribute('aria-pressed')"],
+  ["click", "[data-preset='-10']"],
+  ["eval", "'пресет на паузе (сразу): ' + document.querySelector('[data-v=mode]').textContent + ' · ' + document.querySelector('[data-readout]').textContent + ' · ползунок ' + document.querySelector('#dc-outdoor').value"],
+  ["wait", 4000],
+  ["eval", "new Promise((done) => { const a = window.__dcFrames; setTimeout(() => done('пауза через 4 с: кадров за 1 с: ' + (window.__dcFrames - a)), 1000); })"]
+]

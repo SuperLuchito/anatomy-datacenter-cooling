@@ -1,0 +1,11 @@
+[
+  ["wait", 9000],
+  ["key", " ", ".dc-viewport"],
+  ["wait", 6000],
+  ["eval", "new Promise((done) => { const a = window.__dcFrames; setTimeout(() => done('пауза после затухания: кадров за 2 с: ' + (window.__dcFrames - a) + ' · уровни воздуха ' + Array.from(window.__dc3d.st.air.levels).map((v) => v.toFixed(2)).join(' ')), 2000); })"],
+  ["shot", "shots/3d/hd-page.png", ".dc-card .iso-plate", 1],
+  ["shot", "shots/3d/hd-racks.png", ".dc-card .iso-plate", 1, [150, 100, 220, 230]],
+  ["shot", "shots/3d/hd-crac.png", ".dc-card .iso-plate", 1, [265, 220, 190, 200]],
+  ["shot", "shots/3d/hd-dry.png", ".dc-card .iso-plate", 1, [560, 300, 230, 230]],
+  ["shot", "shots/3d/hd-plenum.png", ".dc-card .iso-plate", 1, [60, 290, 240, 110]]
+]

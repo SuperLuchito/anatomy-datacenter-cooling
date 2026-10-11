@@ -1,0 +1,5 @@
+[
+  ["wait", 7000],
+  ["eval", "'3d=' + document.querySelector('.dc-stage').hasAttribute('data-3d') + ' · scrollWidth ' + document.documentElement.scrollWidth + ' / ' + innerWidth + ' · canvas ' + (window.__dc3d ? window.__dc3d.gl.canvas.width + '×' + window.__dc3d.gl.canvas.height : '-')"],
+  ["shot", "shots/3d/misc.png", ".dc-card .iso-plate", 1]
+]

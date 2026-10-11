@@ -19,7 +19,15 @@ body{margin:0;background:var(--anatomy-page);color:var(--anatomy-text);font:15px
 .dc-viewport[data-zoomed]{cursor:grab;touch-action:none}
 .dc-viewport[data-dragging]{cursor:grabbing}
 .dc-viewport:focus-visible{outline:2px solid var(--dc-focus);outline-offset:4px}
-.dc-zoomer{transform-origin:0 0;will-change:transform}
+.dc-zoomer{position:relative;transform-origin:0 0;will-change:transform}
+/* 3D-вид поверх SVG того же размера; SVG остаётся запасным рисунком без WebGL */
+.dc-view3d{position:absolute;inset:0;display:block;width:100%;height:100%}
+.dc-stage:not([data-3d]) .dc-view3d{display:none}
+.dc-stage[data-3d] .dc-zoomer>svg{visibility:hidden}
+.dc-stage[data-3d] .dc-viewport{cursor:grab}
+.dc-stage[data-3d] .dc-viewport[data-dragging]{cursor:grabbing}
+.dc-page:not([data-3d]) .dc-only3d,.dc-page[data-3d] .dc-only2d{display:none}
+.dc-view-buttons{margin-top:8px}
 .dc-zoomer .iso-svg{width:100%;height:auto}
 .dc-sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 .iso-plate-corner[data-corner="readout"]{white-space:normal;text-align:right;max-width:min(56%,420px)}
@@ -112,7 +120,8 @@ body{margin:0;background:var(--anatomy-page);color:var(--anatomy-text);font:15px
   .dc-page{width:calc(100% - 32px);padding-top:24px}
   .dc-card .iso-plate{padding:40px 8px 64px}
   .iso-plate-corner[data-corner="readout"]{max-width:62%}
-  .dc-wide{display:none}.dc-narrow{display:inline}
+  .dc-wide{display:none!important}.dc-narrow{display:inline}
+  .dc-page:not([data-3d]) .dc-narrow.dc-only3d,.dc-page[data-3d] .dc-narrow.dc-only2d{display:none}
   .dc-row{grid-template-columns:minmax(96px,1fr) 1.2fr auto;gap:8px;font-size:13px}
   .dc-panel{grid-template-columns:1fr}
 }

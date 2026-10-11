@@ -1,0 +1,6 @@
+[
+  ["wait", 3000],
+  ["eval", "(() => { const s = window.__dc3d; return '3d=' + document.querySelector('.dc-stage').hasAttribute('data-3d') + ' · ' + (s ? JSON.stringify(s.stats) + ' · canvas ' + s.gl.canvas.width + '×' + s.gl.canvas.height + ' · ' + s.gl.getParameter(s.gl.RENDERER) : 'нет'); })()"],
+  ["eval", "new Promise((done) => { const a = window.__dcFrames; setTimeout(() => done('кадров за 2 с: ' + (window.__dcFrames - a)), 2000); })"],
+  ["shot", "shots/3d-rest.png", ".dc-card .iso-plate", 2]
+]

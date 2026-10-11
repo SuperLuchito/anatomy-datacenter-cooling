@@ -9,7 +9,9 @@ import * as k from "./vendor/anatomy/kit/iso-kit.mjs";
 import * as G from "./vendor/anatomy/kit/lathe.mjs";
 import { tubePieces, tubeSvg } from "./vendor/anatomy/kit/tube.mjs";
 import * as A from "./vendor/anatomy/kit/audit.mjs";
-import { kitScript } from "./vendor/anatomy/scripts/inline-kit.mjs";
+import { kitScript, glScript } from "./vendor/anatomy/scripts/inline-kit.mjs";
+import { glCamera } from "./vendor/anatomy/kit/gl.mjs";
+import { export3d } from "./export3d.mjs";
 import { COEF } from "./model.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -155,6 +157,7 @@ function flangeAt(piece, name, centre, axis, r, thick, { bolts = 6, tone = "mid"
 
 const ROUTES = {}; // маршруты труб для маркеров потока
 const FAN_WHEEL = {};
+const BLADES3D = [];
 function pipe(piece, name, control, r, { bend = 2.6, tone = "hi", flanges = [true, true], flangeR = 1.55, bands = [], bandPoints = [], bandR = 1.16, bandT = null, valve = null, valveR = null, gaps: extra = [], maxLength = 22, group, limp = false, caps = true } = {}) {
   const line = G.fillet(control, Math.max(r * bend, 3), r > 3 ? 18 : 12, { P, tube: r });
   const total = G.pathLength(line);
@@ -658,6 +661,14 @@ const FAN_ITEMS = [];
       const pt = (r, da) => `${f2(r * Math.cos(a + da))} ${f2(r * Math.sin(a + da))}`;
       return `M${pt(6.2, -0.34)}Q${pt(13.5, -0.12)} ${pt(20.6, 0.02)}Q${pt(21.2, 0.2)} ${pt(20.6, 0.42)}Q${pt(13.5, 0.46)} ${pt(6.2, 0.36)}Z`;
     }).join("");
+    // те же лопасти для 3D: квадратичные дуги в плоскости ротора, точки в мировых единицах от оси
+    BLADES3D.push({ item: name, c: [fan.x, fan.y], z: FAN.rotor, deck: deck1, rIn: FAN.rIn, blades: Array.from({ length: 5 }, (_, i) => {
+      const a = (i / 5) * Math.PI * 2;
+      const pt = (r, da) => [r * Math.cos(a + da), r * Math.sin(a + da)];
+      const q = (p0, p1, p2) => Array.from({ length: 8 }, (_, j) => { const t = (j + 1) / 8; return [0, 1].map((k2) => (1 - t) * (1 - t) * p0[k2] + 2 * (1 - t) * t * p1[k2] + t * t * p2[k2]); });
+      const s = pt(6.2, -0.34);
+      return [s, ...q(s, pt(13.5, -0.12), pt(20.6, 0.02)), ...q(pt(20.6, 0.02), pt(21.2, 0.2), pt(20.6, 0.42)), ...q(pt(20.6, 0.42), pt(13.5, 0.46), pt(6.2, 0.36))].map((p) => p.map(f2));
+    }) });
     const rotor = `<g transform="${matrix}"><clipPath id="dc-fan${index}"><circle cx="${f2(clip[0])}" cy="${f2(clip[1])}" r="${FAN.rIn - 0.3}"/></clipPath><g clip-path="url(#dc-fan${index})"><g data-fan="${index}"><path class="dc-blade" d="${blades}"/></g></g></g>`;
     const motorTop = FAN.top - 0.1;
     const motor = S(k.cylinder(fan.x, fan.y, 6, FAN.rotor - 1.4, motorTop - FAN.rotor + 1.4, P, 40, 0.3), { tone: "mid" }) + Ln(k.ring(fan.x, fan.y, 3.4, motorTop, P, 32), { tone: "lo" }) + Dots([0, 1, 2, 3].map((i) => at([fan.x + 4.6 * Math.cos(i * Math.PI / 2 + 0.4), fan.y + 4.6 * Math.sin(i * Math.PI / 2 + 0.4), motorTop])), { size: 0.4 });
@@ -942,7 +953,7 @@ function flow(id, kind, nodes, { closed = false, spacing, zones = [] } = {}) {
     const tangent = G.tangentAlong(loop, s);
     screen[i] = at(G.add3(G.pointAlong(loop, s), G.mul3(liftDir([0, 0, 0], tangent), liftAt(s)))).map(f2);
   }
-  FLOWS.push({ id, kind, closed, total: f2(total), spacing, screen, zones: zones.map(([s0, s1, tag]) => [f2(s0), f2(s1), tag]), segs: segs.map((seg) => ({ a: f2(seg.a), b: f2(seg.b), slot: seg.lo, valid: seg.valid })) });
+  FLOWS.push({ id, kind, closed, total: f2(total), spacing, path: loop.map((p) => p.map(f2)), lift: liftLoop.map(f2), screen, zones: zones.map(([s0, s1, tag]) => [f2(s0), f2(s1), tag]), segs: segs.map((seg) => ({ a: f2(seg.a), b: f2(seg.b), slot: seg.lo, valid: seg.valid })) });
 }
 const arcWhere = (points, test) => {
   let acc = 0;
@@ -1040,6 +1051,88 @@ FANS.forEach((fan, index) => {
   }
 });
 
+
+// ── Воздух для слоя WebGL ──
+// Потоки в свободном воздухе (узел: x, y, z, радиус) и заместители деталей, которые их закрывают.
+// Шейдер собирается здесь же: числа геометрии попадают в него литералами, без массивов uniform.
+const AIR_STREAMS = [];
+const stream = (group, kind, nodes, radius = 9) => AIR_STREAMS.push({ group, kind, nodes: radius ? filletAir(nodes, radius) : nodes });
+// скругление ломаной с интерполяцией радиуса трубки
+function filletAir(nodes, radius) {
+  const pts = G.fillet(nodes.map((n) => n.slice(0, 3)), radius, 3);
+  const raw = nodes.map((n) => n.slice(0, 3));
+  const cum = [0];
+  for (let i = 1; i < raw.length; i++) cum.push(cum[i - 1] + G.len3(G.sub3(raw[i], raw[i - 1])));
+  const along = [0];
+  for (let i = 1; i < pts.length; i++) along.push(along[i - 1] + G.len3(G.sub3(pts[i], pts[i - 1])));
+  const scale = cum[cum.length - 1] / along[along.length - 1];
+  return pts.map((p, i) => {
+    const s = along[i] * scale;
+    let j = 1;
+    while (j < cum.length - 1 && cum[j] < s) j++;
+    const t = Math.min(1, Math.max(0, (s - cum[j - 1]) / (cum[j] - cum[j - 1] || 1)));
+    const m0 = nodes[j - 1][4] ?? 1;
+    const m1 = nodes[j][4] ?? 1;
+    return [...p, nodes[j - 1][3] + (nodes[j][3] - nodes[j - 1][3]) * t, m0 + (m1 - m0) * t];
+  });
+}
+// подполье: от кондиционера вдоль открытого выреза к стойкам
+stream("plenum", 0, [[-97, 66, 11, 0], [-110, 66, 11, 6.5], [-150, 65, 11, 7], [-205, 64, 11, 7], [-246, 61, 11, 4.5], [-262, 58, 11, 0]], 14);
+RACKS.forEach((rack, k) => {
+  const xk = rack.x0 + 15;
+  const zk = SERVER_Z[SERVER_OF[k]] + SERVER_H / 2;
+  const gx = [-84, -71, -58][k];
+  const gy = [48, 58, 68][k];
+  // холодный коридор: из перфорированной плиты вверх к лицевым панелям
+  stream("aisle", 0, [[xk, 6, F + 0.5, 0, 1], [xk, 5, F + 9, 11, 1], [xk, 1, F + 48, 12, 0.72], [xk, -5, F + 86, 9, 0.42], [xk, -7.5, F + 100, 0, 0.3]], 0);
+  // горячий коридор: из задних панелей вверх, над стойками к верхнему входу кондиционера
+  stream("hot", 1, [[xk, rack.y0 - 3, zk, 0], [xk, -82, zk + 10, 7], [xk, -86, F + 100, 10], [xk + 4, -84, 132, 11, 0.9], [xk + 22, -66, 140, 10, 0.62], [gx - 14, gy - 26, 140, 9, 0.5], [gx, gy, 130, 8, 0.5], [gx, gy, CRAC.z1 - 1, 0, 0.5]], 10);
+});
+FANS.forEach((fan) => {
+  stream("intake", 2, [[fan.x - 4, fan.y + 40, 2.5, 0, 0.8], [fan.x - 2, fan.y + 24, 12, 9, 1], [fan.x, fan.y + 6, 28, 12, 1], [fan.x, fan.y, DRY.legTop + 1, 0, 1]], 10);
+  stream("exhaust", 3, [[fan.x, fan.y, FAN.top - 1, 0, 0.25], [fan.x, fan.y, FAN.top + 8, 15, 0.7], [fan.x + 3, fan.y + 2, 102, 18, 1], [fan.x + 7, fan.y + 4, 124, 20, 0.85], [fan.x + 9, fan.y + 5, 134, 0, 0.6]], 12);
+});
+const GL = (v) => {
+  const s = (Math.round(v * 1000) / 1000).toString();
+  return s.includes(".") || s.includes("e") ? s : `${s}.`;
+};
+const V3 = (p) => `vec3(${GL(p[0])},${GL(p[1])},${GL(p[2])})`;
+const AIR_PERIOD = 576; // период рисунка вдоль потока: 48 ячеек по 12 единиц
+// Код каждого потока: отрезки трубки с радиусом и плотностью в узлах. Отсечение по 3D-рамке потока,
+// перекрытие деталями считает шейдер по буферу глубины сцены (scene3d.js).
+const airStreamCode = [];
+let airSegments = 0;
+AIR_STREAMS.forEach(({ group, kind, nodes }, index) => {
+  let s = 0;
+  const segs = [];
+  const lo = [Infinity, Infinity, Infinity];
+  const hi = [-Infinity, -Infinity, -Infinity];
+  for (let i = 1; i < nodes.length; i++) {
+    const [a, b] = [nodes[i - 1], nodes[i]];
+    const length = G.len3(G.sub3(b.slice(0, 3), a.slice(0, 3)));
+    if (length < 1e-3) continue;
+    if (Math.max(a[3], b[3]) > 0.05) segs.push(`seg(acc,p0,V,tF,${V3(a)},${V3(b)},vec3(${GL(a[3])},${GL(b[3])},${GL(s)}),vec2(${GL(a[4] ?? 1)},${GL(b[4] ?? 1)}));`);
+    s += length;
+    for (const n of [a, b]) for (let k2 = 0; k2 < 3; k2++) (lo[k2] = Math.min(lo[k2], n[k2] - 2 * n[3] - 1)), (hi[k2] = Math.max(hi[k2], n[k2] + 2 * n[3] + 1));
+  }
+  airSegments += segs.length;
+  const phase = kind < 2 ? "uPhase.x" : "uPhase.y";
+  const seed = GL(index * 3.7 + 1.3);
+  airStreamCode.push({ group, lo, hi, code: `  if(hitBox(p0,V,${V3(lo)},${V3(hi)})){
+    acc=vec4(0.);
+    ${segs.join("\n    ")}
+    d${kind}=max(d${kind},finish(acc,${phase},${seed},px));
+  }` });
+});
+const AIR_GROUPS = [...new Set(airStreamCode.map((part) => part.group))].map((group) => {
+  const parts = airStreamCode.filter((part) => part.group === group);
+  const lo = [0, 1, 2].map((i) => f2(Math.min(...parts.map((p) => p.lo[i]))));
+  const hi = [0, 1, 2].map((i) => f2(Math.max(...parts.map((p) => p.hi[i]))));
+  return { group, lo, hi, code: parts.map((part) => part.code).join("\n") };
+});
+console.log(`air ${AIR_STREAMS.length} streams, ${airSegments} segments, groups ${AIR_GROUPS.map((g) => g.group).join(", ")}`);
+const AIR_GL = { period: AIR_PERIOD, groups: AIR_GROUPS };
+
 // Разметка маркеров в местах порядка отрисовки
 const MARK_R = { air: 1.7, glycol: 1.45, ref: 1.25, outdoor: 1.7 };
 const slotMarkup = new Map();
@@ -1069,21 +1162,113 @@ const STEPS = [
 ];
 const pitch = (Math.PI * 2) / 22;
 const WHEEL = Array.from({ length: 24 }, (_, i) => FAN_WHEEL.d((i / 24) * pitch));
-const DATA = { flows: FLOWS, steps: STEPS, wheel: WHEEL };
+// ── 3D: формы из рекордера, детали рисунка на поверхностях, разлёт ──
+const BACK_SHAPES = [...R.solids.filter((shape) => shape.name === "stand.base" || shape.name === "stand.foot"), A.slab(STRIP, 0, 0.6, { name: "stand.strip" }, 3), A.slab(LABEL, 0, 0.8, { name: "stand.label" }, 3)];
+const SCENE3D = export3d({ R, P, GROUP, extraItems: [{ name: "stand.base", svg: back.join(""), shapes: BACK_SHAPES }] });
+SCENE3D.blades = BLADES3D.map((fan) => ({ ...fan, item: SCENE3D.items.findIndex((item) => item.n === fan.item) }));
+SCENE3D.wheel = { item: SCENE3D.items.findIndex((item) => item.n === "crac.fan.wheel"), c: [FANC.x, FANC.y], z0: 41.2, z1: FANC.deck - 4, r0: 11.6, r1: 14.8, count: 22, twist: 0.35 };
+SCENE3D.label = { x: LABEL.x, y: LABEL.y, w: LABEL.w, d: LABEL.d, z: 0.8, text: "УЧЕБНЫЙ МАКЕТ", size: 4.2, at: [LABEL.x + LABEL.w / 2, LABEL.y + 7.6] };
+SCENE3D.centre = [f2((BASE.x * 2 + BASE.w) / 2), f2((BASE.y * 2 + BASE.d) / 2), 40];
+SCENE3D.base = { x: BASE.x, y: BASE.y, w: BASE.w, d: BASE.d, z0: -BASE_H - FOOT_H };
+SCENE3D.camera.view = [W, H];
+console.log(`3d: ${SCENE3D.items.length} items, lines ${SCENE3D.stats.lines} (${SCENE3D.stats.points} points, dropped ${SCENE3D.stats.dropped}), dots ${SCENE3D.stats.dots}, fills ${SCENE3D.stats.fills}, ${(JSON.stringify(SCENE3D).length / 1024).toFixed(0)} KB`);
+const DATA = { flows: FLOWS, steps: STEPS, wheel: WHEEL, air: AIR_GL, scene: SCENE3D };
+
+// --explode: проходят ли детали друг сквозь друга в кадрах разборки. Те же часы, что на странице
+// (общая разборка: узлы по очереди, сборка в обратном порядке; разборка одного узла), шаг 1/30 с;
+// в каждом кадре смещение детали ставится её формам, и аудит кита ищет проникновения твёрдых тел и труб.
+if (process.argv.includes("--explode")) {
+  const EXd = SCENE3D.explode;
+  const TMAX = EXd.partSpan + EXd.duration;
+  const units = SCENE3D.units;
+  const smoothX = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
+  const itemOfShape = new Map();
+  R.items.forEach((item) => {
+    const i3 = SCENE3D.items.find((one) => one.n === item.name);
+    for (const shape of item.shapes) itemOfShape.set(shape, i3);
+  });
+  // трассы труб записаны отдельно от кусков-деталей: трасса едет вместе с деталями своей трубы
+  for (const tube of R.tubes) {
+    const i3 = SCENE3D.items.find((one) => one.n === tube.name || one.n.startsWith(`${tube.name}:`));
+    if (i3) itemOfShape.set(tube, i3);
+    else console.log(`  трасса без детали: ${tube.name}`);
+  }
+  const all = [...R.solids, ...R.tubes];
+  const pose = (clocks, wholes) => {
+    for (const shape of all) {
+      const it = itemOfShape.get(shape);
+      if (!it) {
+        shape.move = [0, 0, 0];
+        continue;
+      }
+      const c = clocks[it.u];
+      const share = smoothX((c - it.w) / EXd.duration);
+      const ws = wholes[it.u] * smoothX(c / 0.8);
+      shape.move = [0, 1, 2].map((k2) => it.m[k2] * share + it.um[k2] * ws);
+    }
+  };
+  // сценарии страницы: общая разборка и сборка; разборка узлов выбранного шага (как STEP_UNITS в live.js)
+  const scenarios = [];
+  const step = 1 / 30;
+  const idOf = (id) => units.findIndex((u) => u.id === id);
+  const sets = [units.map((u, i) => i).filter((i) => units[i].id !== "stand"), ...[["rack1", "rack2", "rack3"], ["crac"], ["pipes", "pump"], ["dry"]].map((ids) => ids.map(idOf))];
+  sets.forEach((set, n) => {
+    const whole = n === 0;
+    const sorted = [...set].sort((a, b) => units[a].order - units[b].order);
+    for (const open of [true, false]) {
+      const seq = open ? sorted : [...sorted].reverse();
+      const span = (seq.length - 1) * EXd.unitGap + TMAX;
+      for (let t = 0; t <= span + 1e-9; t += step) {
+        const clocks = units.map((_, i) => (set.includes(i) && !open ? TMAX : 0));
+        seq.forEach((u, k) => {
+          const local = Math.max(0, Math.min(TMAX, t - k * EXd.unitGap));
+          clocks[u] = open ? local : TMAX - local;
+        });
+        scenarios.push({ label: `${whole ? "вся установка" : set.map((i) => units[i].id).join("+")} ${open ? "разборка" : "сборка"} ${t.toFixed(2)} с`, clocks, wholes: units.map((_, i) => (whole && set.includes(i) ? 1 : 0)) });
+      }
+    }
+  });
+  const found = new Map();
+  const started = Date.now();
+  for (const sc of scenarios) {
+    pose(sc.clocks, sc.wholes);
+    const hits = [...A.solidClearances(R.solids, { state: 1 }), ...A.clearances(R.tubes, R.solids, { state: 1 }).filter((p) => p.kind === "through")];
+    for (const hit of hits) {
+      const key = [hit.tube, hit.other].sort().join(" × ");
+      if (!found.has(key) || found.get(key).clearance > hit.clearance) found.set(key, { ...hit, label: sc.label });
+    }
+  }
+  for (const shape of all) shape.move = [0, 0, 0];
+  console.log(`explode: ${scenarios.length} кадров, ${found.size} пар с проникновением, ${((Date.now() - started) / 1000).toFixed(0)} с`);
+  const groupsOf = new Map();
+  for (const [key, hit] of found) {
+    const g = key.replace(/#\d+/g, "").replace(/rack\d/g, "rackN").replace(/srv\d/g, "srvN");
+    if (!groupsOf.has(g) || groupsOf.get(g).clearance > hit.clearance) groupsOf.set(g, { ...hit, count: (groupsOf.get(g)?.count ?? 0) + 1 });
+    else groupsOf.get(g).count++;
+  }
+  for (const [key, hit] of [...groupsOf].sort((a, b) => a[1].clearance - b[1].clearance)) console.log(`  ${key} ×${hit.count}  ${hit.clearance.toFixed(2)}  ${hit.label}  at ${hit.at.map((v) => v.toFixed(1)).join(",")}`);
+}
 
 const LICENSE = readFileSync(join(HERE, "vendor", "anatomy", "LICENSE"), "utf8").trim();
 const MODEL = readFileSync(join(HERE, "model.mjs"), "utf8").replace(/^export /gm, "");
 const LIVE = readFileSync(join(HERE, "live.js"), "utf8").replace("__DATA__", JSON.stringify(DATA));
 const CSS = readFileSync(join(HERE, "page.css"), "utf8");
+const SCENE3D_JS = readFileSync(join(HERE, "scene3d.js"), "utf8");
 
 const swatch = (inner) => `<svg class="dc-swatch" viewBox="0 0 30 10" aria-hidden="true">${inner}</svg>`;
 const dotRow = (cls, tag) => [5, 15, 25].map((x) => `<circle cx="${x}" cy="5" r="2.6" data-t="${tag}"/>`).join("");
+// дымка в легенде: та же краска, что у воздуха в шейдере (светлая тема), с мягкими краями
+const haze = (id, rgb, a) => swatch(`<defs><linearGradient id="${id}" x1="0" x2="1"><stop offset="0" stop-color="rgb(${rgb})" stop-opacity="0"/><stop offset=".3" stop-color="rgb(${rgb})" stop-opacity="${a}"/><stop offset=".7" stop-color="rgb(${rgb})" stop-opacity="${a}"/><stop offset="1" stop-color="rgb(${rgb})" stop-opacity="0"/></linearGradient></defs><rect x="0" y="1" width="30" height="8" rx="4" fill="url(#${id})"/>`);
 const legend = [
-  ["Холодный поток: воздух под полом и в холодном коридоре, смесь на подаче", swatch(`<g class="mk" data-kind="air">${dotRow("", "c")}</g>`)],
-  ["Тёплый поток: воздух за стойками, смесь на возврате", swatch(`<g class="mk" data-kind="air">${dotRow("", "w")}</g>`)],
-  ["Хладагент (нейтральные кольца)", swatch(`<g class="mk" data-kind="ref">${dotRow("", "n")}</g>`)],
-  ["Наружный воздух — только через драйкулер", swatch(`<g class="mk" data-kind="outdoor"><circle cx="5" cy="5" r="2.6" data-t="c"/><circle cx="15" cy="5" r="2.6" data-t="c"/><circle cx="25" cy="5" r="2.6" data-t="w"/></g>`)],
-  ["Выбранный узел — тёмный контур", swatch(`<path d="M2 8 L14 2 L28 8" fill="none" stroke="#000" stroke-width="1.2"/>`)],
+  ["Холодный воздух зала — голубая дымка: из подполья через плиты к лицевым панелям", haze("dc-hz-c", "92,158,230", 0.5), "dc-only3d"],
+  ["Тёплый воздух — охристая дымка: за стойками и к верхнему входу кондиционера", haze("dc-hz-w", "230,158,77", 0.44), "dc-only3d"],
+  ["Смесь в трубах: голубые точки на подаче, охристые на возврате", swatch(`<g class="mk" data-kind="air"><circle cx="5" cy="5" r="2.6" data-t="c"/><circle cx="15" cy="5" r="2.6" data-t="c"/><circle cx="25" cy="5" r="2.6" data-t="w"/></g>`), "dc-only3d"],
+  ["Холодный поток: воздух под полом и в холодном коридоре, смесь на подаче", swatch(`<g class="mk" data-kind="air">${dotRow("", "c")}</g>`), "dc-only2d"],
+  ["Тёплый поток: воздух за стойками, смесь на возврате", swatch(`<g class="mk" data-kind="air">${dotRow("", "w")}</g>`), "dc-only2d"],
+  ["Хладагент (нейтральные кольца)", swatch(`<g class="mk" data-kind="ref">${dotRow("", "n")}</g>`), ""],
+  ["Наружный воздух — только через драйкулер", haze("dc-hz-o", "107,163,224", 0.5), "dc-only3d"],
+  ["Наружный воздух — только через драйкулер", swatch(`<g class="mk" data-kind="outdoor"><circle cx="5" cy="5" r="2.6" data-t="c"/><circle cx="15" cy="5" r="2.6" data-t="c"/><circle cx="25" cy="5" r="2.6" data-t="w"/></g>`), "dc-only2d"],
+  ["Выбранный узел — тёмный контур", swatch(`<path d="M2 8 L14 2 L28 8" fill="none" stroke="#000" stroke-width="1.2"/>`), ""],
 ];
 const row = (key, sym, label) => `<div class="dc-row" data-q="${key}"><span class="dc-sym">${sym}<small>${label}</small></span><span class="dc-track"><span class="dc-fill" data-fill></span></span><span data-num>—</span></div>`;
 
@@ -1101,17 +1286,17 @@ const BODY = `
           <div class="iso-plate-corners" aria-hidden="true">
             <span class="iso-plate-corner" data-corner="fig">Рис. 1</span>
             <span class="iso-plate-corner" data-corner="title">Зал · улица</span>
-            <span class="iso-plate-corner" data-corner="hint"><span class="dc-wide">Нажмите на узел · 1–5 · ← → · пробел · R</span><span class="dc-narrow">Нажмите на узел · 1–5</span></span>
+            <span class="iso-plate-corner" data-corner="hint"><span class="dc-wide dc-only3d">Тяните — вращение · X — разобрать · 1–5 · R</span><span class="dc-narrow dc-only3d">Тяните — вращение · 1–5</span><span class="dc-wide dc-only2d">Нажмите на узел · 1–5 · ← → · пробел · R</span><span class="dc-narrow dc-only2d">Нажмите на узел · 1–5</span></span>
             <span class="iso-plate-corner" data-corner="readout" data-readout></span>
           </div>
-          <div class="dc-viewport" tabindex="0" role="group" aria-label="Изометрический разрез. Нажмите на стойки, кондиционер, трубы или драйкулер, чтобы выбрать узел. При увеличении сцену можно перетаскивать; Escape возвращает обычный масштаб.">
-            <div class="dc-zoomer">${svg}</div>
+          <div class="dc-viewport" tabindex="0" role="group" aria-label="Разрез установки. Тяните, чтобы вращать сцену; Q и E поворачивают, W и S меняют наклон, X разбирает выбранный узел или всю установку на детали. Нажмите на стойки, кондиционер, трубы или драйкулер, чтобы выбрать узел. Escape возвращает обычный масштаб.">
+            <div class="dc-zoomer">${svg}<canvas class="dc-view3d" aria-hidden="true"></canvas></div>
           </div>
           <p class="dc-sr" role="status" aria-live="polite" data-status></p>
         </div>
         <figcaption class="dc-legend">
-          ${legend.map(([label, mark]) => `<span class="dc-key">${mark}${label}</span>`).join("")}
-          <span class="dc-key dc-cond">Скорость движения маркеров и вращения вентиляторов условная; показана только качественно.</span>
+          ${legend.map(([label, mark, cls]) => `<span class="dc-key${cls ? ` ${cls}` : ""}">${mark}${label}</span>`).join("")}
+          <span class="dc-key dc-cond">Скорость маркеров, движения воздуха и вращения вентиляторов условная; показана только качественно. Плотность дымки тоже условная: тёплый воздух гуще при большей нагрузке, наружный — при большей интенсивности вентиляторов.</span>
         </figcaption>
       </figure>
       <section class="dc-box dc-explain" aria-live="off">
@@ -1177,13 +1362,19 @@ const BODY = `
           <button class="dc-btn" type="button" data-act="zoom" aria-pressed="false">Увеличить ×1.6</button>
           <button class="dc-btn" type="button" data-act="reset">Сброс</button>
         </div>
-        <p class="dc-hint">Клавиши: 1–5 — узлы, ← → — шаги, пробел — пауза, R — сброс, Escape — обычный масштаб. Ползунки слушают стрелки сами.</p>
+        <div class="dc-buttons dc-view-buttons dc-only3d" role="group" aria-label="Вид">
+          <button class="dc-btn" type="button" data-act="turn-left" aria-label="Повернуть сцену влево на 30°">↺ 30°</button>
+          <button class="dc-btn" type="button" data-act="turn-right" aria-label="Повернуть сцену вправо на 30°">↻ 30°</button>
+          <button class="dc-btn" type="button" data-act="explode" aria-pressed="false">Разобрать</button>
+        </div>
+        <p class="dc-hint">Клавиши: 1–5 — узлы, ← → — шаги, пробел — пауза, R — сброс, Escape — обычный масштаб.<span class="dc-only3d"> Q / E — поворот, W / S — наклон, X — разобрать или собрать (выбранный узел или всю установку); мышью: тянуть — вращение, Shift или правая кнопка — сдвиг.</span> Ползунки слушают стрелки сами.</p>
       </section>
     </aside>
   </div>
   <details class="dc-details">
     <summary>Что принято в этой учебной модели</summary>
     <ul>
+      <li><b>3D-вид.</b> Сцена вращается и разбирается в браузере на WebGL. Меши строятся из тех же форм деталей, что проверяет аудит Anatomy (призмы, тела вращения, трубы), линии и винты рисунка перенесены на поверхности деталей; разлёт деталей — иллюстрация состава узлов, а не порядок реального монтажа. Без WebGL страница показывает изометрический SVG-рисунок.</li>
       <li><b>Почему HPM F.</b> Принцип исполнения F (Freecooler) взят из руководства Vertiv Liebert HPM A/W/F/D/H, редакция 23.01.2018, раздел 2.1.4, с учётом соседнего 2.1.3 (W): один теплообменник с рядами фрикулинга и рядами прямого испарения, внешний драйкулер, водно-гликолевая смесь, насос и смесь в поставку блока не входят, двухходовой регулирующий клапан (12) на теплообменнике фрикулинга и соленоидный клапан (13) на водяном пластинчатом конденсаторе. Модель выбрана условно: название Liebert Hiross само по себе не определяет модель и комплектацию.</li>
       <li><b>Геометрия обобщённая.</b> Размеры, расположение узлов, число серверов, трассы труб, опоры и насос нарисованы для объяснения принципа и не повторяют конкретную установку. Ряды фрикулинга и испарителя показаны двумя блоками; конфигурация подачи вниз под фальшпол (Downflow) есть в руководстве как вариант U.</li>
       <li><b>Режим следует из баланса.</b> В руководстве переход описан правилом «улица хотя бы на 5 градусов холоднее возвратного воздуха» и температурой ZET. Здесь режим не переключается по порогу: он получается из совместного решения уравнений, а крайние режимы определяются с допуском 0,001 кВт.</li>
@@ -1205,7 +1396,7 @@ const page = `<!doctype html>
 
 ${LICENSE}
 -->
-<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Как ЦОД отдаёт тепло</title><style>${k.ISO_CSS}${CSS}</style></head><body class="iso" data-theme="${DARK ? "dark" : "light"}">${BODY}<script type="module">${(MODEL + "\n" + LIVE).replace(/<\/(script)/gi, "<\\/$1")}</script></body></html>`;
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Как ЦОД отдаёт тепло</title><style>${k.ISO_CSS}${CSS}</style></head><body class="iso" data-theme="${DARK ? "dark" : "light"}">${BODY}<script type="module">${(glScript() + "\n" + SCENE3D_JS + "\n" + MODEL + "\n" + LIVE).replace(/<\/(script)/gi, "<\\/$1")}</script></body></html>`;
 
 mkdirSync(join(HERE, "..", "outputs"), { recursive: true });
 mkdirSync(join(HERE, "shots"), { recursive: true });

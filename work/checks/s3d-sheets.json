@@ -1,0 +1,14 @@
+[
+  ["wait", 6000],
+  ["key", " ", ".dc-viewport"],
+  ["wait", 1500],
+  ["orbit", "shots/3d/orbit.png", 0, 330, 30, ".dc-card .iso-plate", 1, null, 4],
+  ["turn", 0],
+  ["key", " ", ".dc-viewport"],
+  ["wait", 500],
+  ["sheet", "shots/3d/sheet-fans.png", 300, 8, ".dc-card .iso-plate", 3, [575, 330, 130, 80], 4],
+  ["key", "x", ".dc-viewport", "KeyX"],
+  ["sheet", "shots/3d/sheet-explode.png", 900, 12, ".dc-card .iso-plate", 1, null, 4],
+  ["key", "x", ".dc-viewport", "KeyX"],
+  ["sheet", "shots/3d/sheet-assemble.png", 900, 12, ".dc-card .iso-plate", 1, null, 4]
+]

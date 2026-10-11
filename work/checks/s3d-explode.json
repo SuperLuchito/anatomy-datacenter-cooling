@@ -1,0 +1,21 @@
+[
+  ["wait", 2500],
+  ["key", "x", ".dc-viewport", "KeyX"],
+  ["wait", 2500],
+  ["shot", "shots/3d/ex-mid.png", ".dc-card .iso-plate", 1],
+  ["wait", 22000],
+  ["eval", "document.querySelector('[data-act=explode]').textContent + ' · ' + document.querySelector('[data-status]').textContent"],
+  ["shot", "shots/3d/ex-all.png", ".dc-card .iso-plate", 2],
+  ["eval", "window.__dcView(120, 26)"],
+  ["wait", 1500],
+  ["shot", "shots/3d/ex-all-120.png", ".dc-card .iso-plate", 2],
+  ["key", "x", ".dc-viewport", "KeyX"],
+  ["wait", 24000],
+  ["shot", "shots/3d/ex-closed.png", ".dc-card .iso-plate", 1],
+  ["key", "2", ".dc-viewport"],
+  ["key", "x", ".dc-viewport", "KeyX"],
+  ["wait", 14000],
+  ["eval", "window.__dcView(70, 24)"],
+  ["wait", 1500],
+  ["shot", "shots/3d/ex-crac.png", ".dc-card .iso-plate", 2]
+]

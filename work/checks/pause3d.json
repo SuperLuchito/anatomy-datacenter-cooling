@@ -1,0 +1,9 @@
+[
+  ["wait", 1500],
+  ["key", " ", ".dc-viewport"],
+  ["wait", 9000],
+  ["eval", "new Promise((done) => { const a = window.__dcFrames; setTimeout(() => done('3D пауза через 9 с: кадров за 2 с: ' + (window.__dcFrames - a)), 2000); })"],
+  ["key", "e", ".dc-viewport", "KeyE"],
+  ["wait", 9000],
+  ["eval", "new Promise((done) => { const a = window.__dcFrames; setTimeout(() => done('после поворота на паузе: азимут ' + window.__dc3d.cam.az.toFixed(1) + ' · кадров за 2 с: ' + (window.__dcFrames - a)), 2000); })"]
+]

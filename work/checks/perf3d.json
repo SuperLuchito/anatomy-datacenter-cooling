@@ -1,0 +1,6 @@
+[
+  ["wait", 2000],
+  ["key", " ", ".dc-viewport"],
+  ["wait", 500],
+  ["eval", "new Promise((done) => { const s = window.__dc3d; const gl = s.gl; const px = new Uint8Array(4); const t = (fn, n = 4) => { fn(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); const a = performance.now(); for (let i = 0; i < n; i++) { fn(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } return ((performance.now() - a) / n).toFixed(0); }; const full = t(() => s.draw()); const lv = s.st.air.levels; s.st.air.levels = [0, 0, 0, 0]; const noAir = t(() => s.draw()); s.st.air.levels = lv; s.invalidate(); const depth = t(() => { s.invalidate(); s.draw(); }); done('кадр ' + full + ' мс · без воздуха ' + noAir + ' мс · с пересчётом глубины ' + depth + ' мс'); })"]
+]

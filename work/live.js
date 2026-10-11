@@ -133,6 +133,214 @@ const wheel = $("[data-wheel]", svg);
 let fanAngle = 0;
 let wheelPhase = 0;
 
+// ── 3D-вид: WebGL-сцена из форм аудита. Без WebGL остаётся SVG-рисунок с маркерами ──
+const AIR = DATA.air;
+const LIGHT = stage.closest("[data-theme]")?.getAttribute("data-theme") === "dark" ? 0 : 1;
+const view3d = $(".dc-view3d");
+const pageRoot = $(".dc-page");
+let scene = null;
+try {
+  scene = createScene3D(view3d, DATA.scene, { steps: DATA.steps, air: AIR, theme: LIGHT ? "light" : "dark", onLost: () => leave3d() });
+} catch (error) {
+  console.error(error);
+  scene = null;
+}
+if (scene) {
+  stage.setAttribute("data-3d", "");
+  pageRoot.setAttribute("data-3d", "");
+}
+window.__dc3d = scene;
+function leave3d() {
+  scene = null;
+  stage.removeAttribute("data-3d");
+  pageRoot.removeAttribute("data-3d");
+  redraw();
+}
+
+// Уровни воздуха идут по огибающим: холодный зал постоянен (расход воздуха в модели постоянный),
+// тёплый растёт с нагрузкой, наружный воздух следует за интенсивностью вентиляторов драйкулера.
+const airLevel = [0, 1, 2, 3].map(() => ({ x: 0, v: 0 }));
+const airPhase = [0, 0];
+let airClock = 0;
+// множитель воздуха по выбранному шагу: свой поток ярче, чужие тише
+const AIR_FOCUS = [
+  [1, 1, 0.4, 0.4],
+  [1, 1, 0.35, 0.35],
+  [0.35, 0.35, 0.35, 0.35],
+  [0.35, 0.35, 1, 1],
+  [1, 1, 1, 1],
+];
+function airTargets(m) {
+  const f = AIR_FOCUS[state.step] ?? [1, 1, 1, 1];
+  return [f[0], (0.35 + 0.65 * Math.min(1, m.qIT / 80)) * f[1], Math.min(1, m.fan) * f[2], Math.min(1, m.fan) * (0.45 + 0.55 * Math.min(1, m.qOut / 107)) * f[3]];
+}
+
+// ── камера: показываемый вид догоняет цель; перетаскивание двигает оба сразу ──
+const VIEW_REST = { az: 58, el: 30, zoom: 1 };
+const EL_RANGE = [6, 80];
+const viewShown = { ...VIEW_REST, pan: [0, 0] };
+const viewTarget = { ...VIEW_REST, pan: [0, 0] };
+function easeView(dt, calm) {
+  const k = calm ? 1 : 1 - Math.exp(-dt / 0.2);
+  let moving = false;
+  const step = (get, set, goal) => {
+    const gap = goal - get();
+    if (Math.abs(gap) < 1e-3) set(goal);
+    else {
+      set(get() + gap * k);
+      moving = true;
+    }
+  };
+  for (const key of ["az", "el", "zoom"]) step(() => viewShown[key], (v) => (viewShown[key] = v), viewTarget[key]);
+  for (const i of [0, 1]) step(() => viewShown.pan[i], (v) => (viewShown.pan[i] = v), viewTarget.pan[i]);
+  return moving;
+}
+function turnView(daz, del = 0) {
+  viewTarget.az += daz;
+  viewTarget.el = clampTo(viewTarget.el + del, EL_RANGE[0], EL_RANGE[1]);
+  if (still.matches) Object.assign(viewShown, { az: viewTarget.az, el: viewTarget.el });
+  describeView(true);
+  run();
+  redraw();
+}
+function describeView(say = false) {
+  const az = ((Math.round(viewTarget.az - VIEW_REST.az) % 360) + 540) % 360 - 180;
+  const text = `Поворот ${az > 0 ? "+" : ""}${az}°, наклон ${Math.round(viewTarget.el)}°`;
+  if (say) announce(text);
+  return text;
+}
+
+// ── разборка: у каждого узла свои часы; детали выходят по очереди от края к центру ──
+const UNITS = DATA.scene.units;
+const EX = DATA.scene.explode;
+const T_MAX = EX.partSpan + EX.duration;
+const unitClock = UNITS.map(() => ({ c: 0, target: 0, start: 0, whole: { x: 0, v: 0 }, wholeTarget: 0 }));
+const STEP_UNITS = { servers: ["rack1", "rack2", "rack3"], crac: ["crac"], glycol: ["pipes", "pump"], dry: ["dry"] };
+let exClock = 0;
+const explodeView = { held: false, zoom: 1 };
+const ui3d = { explode: $("[data-act='explode']"), left: $("[data-act='turn-left']"), right: $("[data-act='turn-right']") };
+const isOpen = () => unitClock.some((u) => u.target > 0);
+function setExplode(open) {
+  const step = STEPS[state.step];
+  const ids = open && step && STEP_UNITS[step.id] ? STEP_UNITS[step.id] : null;
+  const changes = [];
+  UNITS.forEach((unit, i) => {
+    const target = open ? (ids ? (ids.includes(unit.id) ? 1 : 0) : unit.id === "stand" ? 0 : 1) : 0;
+    if (open) unitClock[i].wholeTarget = !ids && target ? 1 : 0;
+    if (unitClock[i].target !== target) changes.push(i);
+    unitClock[i].target = target;
+  });
+  // открытие по очереди узлов, закрытие в обратном порядке: последний вышедший возвращается первым
+  changes.sort((a, b) => (open ? UNITS[a].order - UNITS[b].order : UNITS[b].order - UNITS[a].order));
+  changes.forEach((i, k) => (unitClock[i].start = exClock + (still.matches ? 0 : k * EX.unitGap)));
+  // общая разборка шире кадра: камера отъезжает и возвращается при сборке
+  const wholeOpen = open && !ids;
+  if (wholeOpen && !explodeView.held) {
+    explodeView.held = true;
+    explodeView.zoom = viewTarget.zoom;
+    viewTarget.zoom = Math.min(viewTarget.zoom, 0.74);
+    viewTarget.pan = [viewTarget.pan[0], viewTarget.pan[1] + 34];
+  } else if (!wholeOpen && explodeView.held) {
+    explodeView.held = false;
+    viewTarget.zoom = explodeView.zoom;
+    viewTarget.pan = [viewTarget.pan[0], viewTarget.pan[1] - 34];
+  }
+  if (still.matches) Object.assign(viewShown, { zoom: viewTarget.zoom, pan: [...viewTarget.pan] });
+  ui3d.explode?.setAttribute("aria-pressed", String(open));
+  setText(ui3d.explode, open ? "Собрать" : "Разобрать");
+  announce(open ? `Разборка: ${ids ? ids.map((id) => UNITS.find((u) => u.id === id).title).join(", ") : "вся установка"}` : "Сборка");
+  run();
+  redraw();
+}
+const smooth01 = (x) => {
+  const t = clampTo(x, 0, 1);
+  return t * t * (3 - 2 * t);
+};
+function advanceExplode(dt, calm) {
+  exClock += dt;
+  let moving = false;
+  for (const u of unitClock) {
+    const goal = u.target * T_MAX;
+    if (calm) u.c = goal;
+    else if (exClock >= u.start && u.c !== goal) u.c = goal > u.c ? Math.min(goal, u.c + dt) : Math.max(goal, u.c - dt);
+    if (u.c !== goal || exClock < u.start) moving = moving || u.c !== goal;
+    if (u.c === 0 && u.target === 0) u.wholeTarget = 0;
+    if (settle(u.whole, u.wholeTarget, dt, 0.35, calm)) moving = true;
+  }
+  return moving;
+}
+const explodeAmount = () => Math.max(...unitClock.map((u) => u.c / T_MAX));
+const explodeMoving = () => unitClock.some((u) => u.c !== u.target * T_MAX);
+
+// ── маркеры жидкостей в 3D: точки на поверхности трубы со стороны зрителя ──
+const flow3d = flows.filter((flow) => flow.kind === "glycol" || flow.kind === "ref").map((flow) => {
+  const cum = [0];
+  for (let i = 1; i < flow.path.length; i++) cum.push(cum[i - 1] + Math.hypot(...[0, 1, 2].map((k) => flow.path[i][k] - flow.path[i - 1][k])));
+  return { flow, cum };
+});
+function pointOn({ flow, cum }, s) {
+  let i = 1;
+  while (i < cum.length - 1 && cum[i] < s) i++;
+  const a = flow.path[i - 1];
+  const b = flow.path[i];
+  const span = cum[i] - cum[i - 1] || 1;
+  const t = clampTo((s - cum[i - 1]) / span, 0, 1);
+  const tangent = [0, 1, 2].map((k) => (b[k] - a[k]) / span);
+  return { at: [0, 1, 2].map((k) => a[k] + (b[k] - a[k]) * t), tangent, lift: flow.lift[i - 1] + (flow.lift[i] - flow.lift[i - 1]) * t };
+}
+function marks3d(fade) {
+  if (fade < 0.02) return [];
+  const col = scene.colors();
+  const mixFC = clampTo(model.shareFC, 0, 1);
+  const list = [];
+  for (const f of flow3d) {
+    const { flow } = f;
+    const alpha = (flow.idle ? 0.35 : 1) * fade;
+    let zone = 0;
+    for (let i = 0; i < flow.count; i++) {
+      const s = flow.phase + i * flow.spacing;
+      if (s >= flow.total) break;
+      while (zone < flow.zones.length - 1 && s >= flow.zones[zone][1]) zone++;
+      const tag = flow.zones.length ? flow.zones[zone][2] : "n";
+      const rgb = tag === "c" ? col.cold : tag === "w" ? col.warm : tag === "m" ? [0, 1, 2].map((k) => col.cold[k] * mixFC + col.warm[k] * (1 - mixFC)) : col.ref;
+      const p = pointOn(f, s);
+      list.push({ ...p, color: [rgb[0] * alpha, rgb[1] * alpha, rgb[2] * alpha, alpha], size: flow.kind === "ref" ? 2.5 : 2.9, ring: flow.kind === "ref" });
+    }
+  }
+  return list;
+}
+let wheelAngle = 0;
+function draw3d() {
+  if (!scene) return;
+  Object.assign(scene.cam, { az: viewShown.az, el: viewShown.el, zoom: viewShown.zoom, pan: [...viewShown.pan] });
+  const st = scene.st;
+  unitClock.forEach((u, i) => {
+    st.T[i] = u.c;
+    st.U[i] = u.whole.x * smooth01(u.c / 0.8);
+  });
+  st.spin[0] = (fanAngle * Math.PI) / 180;
+  st.spin[1] = ((fanAngle + 31) * Math.PI) / 180;
+  st.spin[2] = wheelAngle;
+  st.step = state.step;
+  const fade = 1 - smooth01(explodeAmount() / 0.18);
+  st.air.levels = airLevel.map((env) => Math.max(0, env.x) * fade);
+  st.air.phase = airPhase;
+  st.air.time = airClock;
+  scene.setMarks(marks3d(fade));
+  scene.draw();
+}
+describeView();
+// крючок для проверок: задать вид без анимации
+// orbit-лист скрипта drive.mjs поворачивает сцену через тот же крючок, что у 3D-режима кита
+window.__isoTurn = scene && { set: (value) => window.__dcView(typeof value === "number" ? VIEW_REST.az + value : value.az ?? viewTarget.az, value.el ?? viewTarget.el), get: () => viewTarget.az - VIEW_REST.az };
+window.__dcView = (az, el = viewTarget.el, zoom = viewTarget.zoom) => {
+  Object.assign(viewTarget, { az, el, zoom });
+  Object.assign(viewShown, { az, el, zoom });
+  describeView();
+  redraw();
+  return `${az}/${el}/${zoom}`;
+};
+
 // ── выделение узлов ──
 const STEPS = DATA.steps;
 const items = $$(".it", svg);
@@ -209,7 +417,14 @@ function render() {
   setText(ui.stepTitle, state.step >= 0 ? `${state.step + 1}. ${STEPS[state.step].title}` : "Как читать рисунок");
   setText(ui.stepText, stepText(state.step, m));
   setText(ui.stepCount, state.step >= 0 ? `шаг ${state.step + 1} из 5` : "узел не выбран");
-  setText(readout, `${MODE_NAME[m.mode]} · ${deg(m.tOutdoor)} · Q_out ${nf(m.qOut)} кВт`);
+  // во время разборки угол говорит о ней: фаза и список узлов берутся из тех же часов, что двигают детали
+  const apart = scene ? unitClock.map((u, i) => (u.c > 0 || u.target > 0 ? UNITS[i] : null)).filter(Boolean) : [];
+  if (apart.length) {
+    const opening = unitClock.some((u) => u.target > 0);
+    const moving = explodeMoving();
+    const names = apart.length > 3 ? `${apart.length} узлов` : apart.map((u) => u.title).join(", ");
+    setText(readout, moving ? `${opening ? "Разборка" : "Сборка"} · ${names}` : `Разобрано · ${names}`);
+  } else setText(readout, `${MODE_NAME[m.mode]} · ${deg(m.tOutdoor)} · Q_out ${nf(m.qOut)} кВт`);
   stage.dataset.mode = m.mode;
   // промежуточный цвет воздуха между теплообменниками: доля фрикулинга
   stage.style.setProperty("--mk-mid-mix", `${(m.shareFC * 100).toFixed(1)}%`);
@@ -255,10 +470,28 @@ function advance(dt) {
   if (moving) {
     fanAngle = (fanAngle + sp.fanDeg * dt) % 360;
     wheelPhase = (wheelPhase + dt * 1.6) % 1;
+    wheelAngle = (wheelAngle + dt * 1.6 * ((Math.PI * 2) / 22)) % (Math.PI * 2);
+    airPhase[0] = (airPhase[0] + sp.air * dt) % AIR.period;
+    airPhase[1] = (airPhase[1] + sp.outdoor * dt) % AIR.period;
+    airClock += dt;
   }
-  for (const flow of flows) placeFlow(flow);
-  for (const fan of dryFans) fan.setAttribute("transform", `rotate(${fanAngle.toFixed(2)})`);
-  if (wheel) {
+  let airMoving = false;
+  // огибающие воздуха нужны только 3D-виду; без WebGL цикл кадров на них не держится
+  if (scene)
+    airTargets(model).forEach((target, index) => {
+      const env = airLevel[index];
+      if (!settle(env, target, dt, 0.5, calm)) return;
+      // остаток меньше 0,002 плотности не виден: огибающая встаёт на цель, и цикл может остановиться
+      if (Math.abs(env.x - target) < 2e-3 && Math.abs(env.v) < 2e-3) Object.assign(env, { x: target, v: 0 });
+      else airMoving = true;
+    });
+  const viewMoving = easeView(dt, calm);
+  const parting = advanceExplode(dt, calm);
+  if (parting || explodeMoving()) airMoving = true;
+  if (viewMoving) airMoving = true;
+  if (!scene) for (const flow of flows) placeFlow(flow);
+  if (!scene) for (const fan of dryFans) fan.setAttribute("transform", `rotate(${fanAngle.toFixed(2)})`);
+  if (wheel && !scene) {
     const index = Math.floor(wheelPhase * DATA.wheel.length) % DATA.wheel.length;
     if (wheel.__i !== index) {
       wheel.innerHTML = DATA.wheel[index];
@@ -271,13 +504,14 @@ function advance(dt) {
     if (next !== state.step) select(next, { fromTour: true });
   }
   render();
+  draw3d();
   const settling = state.target.outdoor !== state.shown.outdoor || state.target.load !== state.shown.load;
-  return moving || settling || state.touring;
+  return moving || settling || state.touring || airMoving;
 }
 
 function tick(now) {
   frame = 0;
-  const dt = last ? Math.min((now - last) / 1000, 1 / 30) : 1 / 60;
+  const dt = last ? Math.min((now - last) / 1000, 0.1) : 1 / 60;
   last = now;
   window.__dcFrames++;
   const keep = advance(dt);
@@ -295,7 +529,8 @@ function stop() {
 }
 function redraw() {
   if (frame) return;
-  advance(0);
+  // огибающие дымки досчитываются кадрами и на паузе
+  if (advance(0)) run();
 }
 
 new IntersectionObserver(
@@ -307,6 +542,7 @@ new IntersectionObserver(
   { rootMargin: "120px 0px" },
 ).observe(stage);
 document.addEventListener("visibilitychange", () => (document.hidden ? stop() : run()));
+window.addEventListener("resize", () => redraw());
 
 // ── сообщения для экранного диктора ──
 let announceTimer = 0;
@@ -346,6 +582,7 @@ function touched() {
 function select(index, { fromTour = false } = {}) {
   state.step = index;
   applyFocus();
+  if (scene && isOpen() && !fromTour) setExplode(true);
   render();
   if (index >= 0) announce(`Шаг ${index + 1} из 5: ${STEPS[index].title}. ${stepText(index, model)}`);
   if (!fromTour) redraw();
@@ -355,7 +592,10 @@ function setCondition(key, value, { instant = false } = {}) {
   const v = clampTo(Number(value), Number(input.min), Number(input.max));
   state.target[key] = v;
   if (input.value !== String(v)) input.value = String(v);
-  if (state.paused || still.matches || instant) state.shown[key] = v;
+  if (state.paused || still.matches || instant) {
+    state.shown[key] = v;
+    recompute();
+  }
   render();
   if (state.paused || still.matches) redraw();
   else run();
@@ -376,6 +616,24 @@ function setPaused(paused) {
   }
 }
 function setZoom(zoom) {
+  if (scene) {
+    // 3D: масштаб камеры вокруг центра холста, без CSS-преобразования
+    const from = viewTarget.zoom;
+    const centre = [DATA.scene.camera.view[0] / 2, DATA.scene.camera.view[1] / 2];
+    const rest = scene.project(DATA.scene.centre);
+    const o = [rest[0], rest[1]];
+    if (zoom === 1) viewTarget.pan = [0, 0];
+    else viewTarget.pan = [0, 1].map((i) => centre[i] - (centre[i] - o[i]) * (zoom / from) - (o[i] - viewShown.pan[i]));
+    viewTarget.zoom = zoom;
+    if (still.matches) Object.assign(viewShown, { zoom, pan: [...viewTarget.pan] });
+    state.zoom = zoom;
+    ui.zoom.setAttribute("aria-pressed", String(zoom !== 1));
+    setText(ui.zoom, zoom === 1 ? "Увеличить ×1.6" : "Обычный масштаб ×1");
+    viewport.toggleAttribute("data-zoomed", zoom !== 1);
+    run();
+    redraw();
+    return;
+  }
   state.zoom = zoom;
   if (zoom === 1) state.pan = [0, 0];
   else {
@@ -386,8 +644,13 @@ function setZoom(zoom) {
   ui.zoom.setAttribute("aria-pressed", String(zoom !== 1));
   setText(ui.zoom, zoom === 1 ? "Увеличить ×1.6" : "Обычный масштаб ×1");
   viewport.toggleAttribute("data-zoomed", zoom !== 1);
+  redraw();
 }
 function applyPan() {
+  if (scene) {
+    zoomer.style.transform = "";
+    return;
+  }
   const box = viewport.getBoundingClientRect();
   const minX = -(state.zoom - 1) * box.width;
   const minY = -(state.zoom - 1) * box.height;
@@ -402,6 +665,11 @@ function reset() {
   ui.outdoor.value = String(DEFAULT.outdoor);
   ui.load.value = String(DEFAULT.load);
   setZoom(1);
+  if (scene) {
+    Object.assign(viewTarget, { ...VIEW_REST, pan: [0, 0] });
+    if (isOpen()) setExplode(false);
+    describeView();
+  }
   for (const flow of flows) flow.phase = 0;
   select(-1);
   recompute();
@@ -460,13 +728,33 @@ ui.zoom.addEventListener("click", () => {
   touched();
   setZoom(state.zoom === 1 ? 1.6 : 1);
 });
+ui3d.explode?.addEventListener("click", () => {
+  touched();
+  setExplode(!isOpen());
+});
+ui3d.left?.addEventListener("click", () => {
+  touched();
+  turnView(-30);
+});
+ui3d.right?.addEventListener("click", () => {
+  touched();
+  turnView(30);
+});
 
 // нажатие на узел рисунка и перетаскивание увеличенной сцены
 let drag = null;
 viewport.addEventListener("pointerdown", (event) => {
   touched();
+  if (scene) {
+    if (event.button !== 0 && event.button !== 2) return;
+    drag = { id: event.pointerId, x: event.clientX, y: event.clientY, az: viewTarget.az, el: viewTarget.el, pan: [...viewTarget.pan], moved: false, shift: event.shiftKey || event.button === 2, touch: event.pointerType === "touch" };
+    return;
+  }
   if (state.zoom === 1 || event.button !== 0) return;
   drag = { id: event.pointerId, x: event.clientX, y: event.clientY, pan: [...state.pan], moved: false };
+});
+viewport.addEventListener("contextmenu", (event) => {
+  if (scene) event.preventDefault();
 });
 viewport.addEventListener("pointermove", (event) => {
   if (!drag || event.pointerId !== drag.id) return;
@@ -477,6 +765,19 @@ viewport.addEventListener("pointermove", (event) => {
     viewport.setPointerCapture(event.pointerId);
     viewport.setAttribute("data-dragging", "");
   }
+  if (drag.moved && scene) {
+    const box = viewport.getBoundingClientRect();
+    const toVb = DATA.scene.camera.view[0] / box.width;
+    if (drag.shift) viewTarget.pan = [drag.pan[0] + dx * toVb, drag.pan[1] + dy * toVb];
+    else {
+      viewTarget.az = drag.az - dx * 0.4;
+      if (!drag.touch) viewTarget.el = clampTo(drag.el + dy * 0.3, EL_RANGE[0], EL_RANGE[1]);
+    }
+    Object.assign(viewShown, { az: viewTarget.az, el: viewTarget.el, pan: [...viewTarget.pan] });
+    describeView();
+    redraw();
+    return;
+  }
   if (drag.moved) {
     state.pan = [drag.pan[0] + dx, drag.pan[1] + dy];
     applyPan();
@@ -484,6 +785,14 @@ viewport.addEventListener("pointermove", (event) => {
 });
 const endDrag = (event) => {
   if (!drag || event.pointerId !== drag.id) return;
+  if (scene && !drag.moved && event.type === "pointerup" && event.button === 0) {
+    // нажатие без перетаскивания: деталь под указателем выбирает свой узел
+    const index = scene.pick(event.clientX, event.clientY);
+    const item = DATA.scene.items[index];
+    const step = item ? STEPS.findIndex((s) => s.pick.includes(item.g ?? (item.n.startsWith("floor.") ? "floor" : ""))) : -1;
+    if (step >= 0) select(step);
+    redraw();
+  }
   if (drag.moved) {
     viewport.__suppressClick = true;
     setTimeout(() => (viewport.__suppressClick = false), 0);
@@ -524,6 +833,13 @@ document.addEventListener("keydown", (event) => {
     event.preventDefault();
     touched();
     reset();
+    return;
+  }
+  if (scene && !isRange && ["KeyQ", "KeyE", "KeyW", "KeyS", "KeyX"].includes(event.code)) {
+    event.preventDefault();
+    touched();
+    if (event.code === "KeyX") setExplode(!isOpen());
+    else turnView(event.code === "KeyQ" ? -15 : event.code === "KeyE" ? 15 : 0, event.code === "KeyW" ? 8 : event.code === "KeyS" ? -8 : 0);
     return;
   }
   if (event.key === "Escape") {

@@ -1,0 +1,78 @@
+[
+ [
+  "wait",
+  2500
+ ],
+ [
+  "eval",
+  "new Promise((done) => { const a = window.__dcFrames; const m0 = JSON.stringify(window.__dc3d.firstMark); setTimeout(() => done('reduced 3D: кадров за 1,5 с: ' + (window.__dcFrames - a) + ' · маркер ' + m0 + ' → ' + JSON.stringify(window.__dc3d.firstMark) + ' · воздух ' + Array.from(window.__dc3d.st.air.levels).map((v) => v.toFixed(2)).join(' ') + ' · время ' + window.__dc3d.st.air.time.toFixed(2)), 1500); })"
+ ],
+ [
+  "click",
+  "[data-act='tour']"
+ ],
+ [
+  "eval",
+  "'reduced: автопоказ aria-pressed=' + document.querySelector('[data-act=tour]').getAttribute('aria-pressed')"
+ ],
+ [
+  "key",
+  "e",
+  ".dc-viewport",
+  "KeyE"
+ ],
+ [
+  "wait",
+  400
+ ],
+ [
+  "eval",
+  "'reduced: E сразу: азимут ' + window.__dc3d.cam.az.toFixed(1)"
+ ],
+ [
+  "key",
+  "x",
+  ".dc-viewport",
+  "KeyX"
+ ],
+ [
+  "wait",
+  400
+ ],
+ [
+  "eval",
+  "'reduced: X сразу: часы ' + Array.from(window.__dc3d.st.T).map((v) => v.toFixed(2)).join(' ') + ' · масштаб ' + window.__dc3d.cam.zoom.toFixed(2)"
+ ],
+ [
+  "shot",
+  "shots/3d/reduced-apart.png",
+  ".dc-card .iso-plate",
+  1
+ ],
+ [
+  "key",
+  "x",
+  ".dc-viewport",
+  "KeyX"
+ ],
+ [
+  "wait",
+  400
+ ],
+ [
+  "eval",
+  "'reduced: X снова: часы ' + Array.from(window.__dc3d.st.T).map((v) => v.toFixed(2)).join(' ')"
+ ],
+ [
+  "click",
+  "[data-preset='35']"
+ ],
+ [
+  "eval",
+  "'reduced: пресет сразу: ' + document.querySelector('[data-readout]').textContent"
+ ],
+ [
+  "eval",
+  "new Promise((done) => { const a = window.__dcFrames; setTimeout(() => done('reduced: кадров за 1 с после действий: ' + (window.__dcFrames - a)), 1000); })"
+ ]
+]

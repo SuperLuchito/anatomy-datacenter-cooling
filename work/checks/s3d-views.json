@@ -1,0 +1,22 @@
+[
+  ["wait", 6000],
+  ["key", " ", ".dc-viewport"],
+  ["wait", 400],
+  ["shot", "shots/3d/z-racks.png", ".dc-card .iso-plate", 3, [150, 100, 200, 220]],
+  ["shot", "shots/3d/z-crac.png", ".dc-card .iso-plate", 3, [265, 220, 180, 190]],
+  ["shot", "shots/3d/z-pump.png", ".dc-card .iso-plate", 3, [340, 360, 230, 140]],
+  ["shot", "shots/3d/z-dry.png", ".dc-card .iso-plate", 3, [560, 330, 220, 200]],
+  ["shot", "shots/3d/z-label.png", ".dc-card .iso-plate", 4, [530, 470, 120, 60]],
+  ["eval", "window.__dcView(148, 30)"],
+  ["wait", 1500],
+  ["shot", "shots/3d/v-148.png", ".dc-card .iso-plate", 2],
+  ["eval", "window.__dcView(238, 34)"],
+  ["wait", 1500],
+  ["shot", "shots/3d/v-238.png", ".dc-card .iso-plate", 2],
+  ["eval", "window.__dcView(328, 22)"],
+  ["wait", 1500],
+  ["shot", "shots/3d/v-328.png", ".dc-card .iso-plate", 2],
+  ["eval", "window.__dcView(20, 65)"],
+  ["wait", 1500],
+  ["shot", "shots/3d/v-top.png", ".dc-card .iso-plate", 2]
+]

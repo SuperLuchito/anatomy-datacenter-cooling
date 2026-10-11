@@ -1,0 +1,402 @@
+[
+ [
+  "wait",
+  1200
+ ],
+ [
+  "eval",
+  "(() => { const q = (s) => document.querySelector(s); const v = (k) => q(`[data-v='${k}']`).textContent; return 'старт: ' + v('mode') + ' · ФК ' + v('shareFC') + ' · ' + [...document.querySelectorAll('[data-q]')].map((r) => r.dataset.q + '=' + r.querySelector('[data-num]').textContent).join(' ') + ' · воздух ' + v('airSupply') + '/' + v('airReturn') + ' · смесь ' + v('glySupply') + '/' + v('glyReturn'); })()"
+ ],
+ [
+  "click",
+  "[data-preset='-10']"
+ ],
+ [
+  "wait",
+  2500
+ ],
+ [
+  "eval",
+  "(() => { const q = (s) => document.querySelector(s); const v = (k) => q(`[data-v='${k}']`).textContent; return 'мороз: ' + v('mode') + ' · ФК ' + v('shareFC') + ' / КМ ' + v('shareDX') + ' · ' + [...document.querySelectorAll('[data-q]')].map((r) => r.dataset.q + '=' + r.querySelector('[data-num]').textContent).join(' ') + ' · смесь ' + v('glySupply') + '/' + v('glyReturn') + ' · вент ' + v('fan'); })()"
+ ],
+ [
+  "shot",
+  "shots/mode-free.png",
+  ".dc-card .iso-plate",
+  2
+ ],
+ [
+  "click",
+  "[data-preset='35']"
+ ],
+ [
+  "wait",
+  2500
+ ],
+ [
+  "eval",
+  "(() => { const q = (s) => document.querySelector(s); const v = (k) => q(`[data-v='${k}']`).textContent; return 'жара: ' + v('mode') + ' · ФК ' + v('shareFC') + ' / КМ ' + v('shareDX') + ' · ' + [...document.querySelectorAll('[data-q]')].map((r) => r.dataset.q + '=' + r.querySelector('[data-num]').textContent).join(' ') + ' · смесь ' + v('glySupply') + '/' + v('glyReturn'); })()"
+ ],
+ [
+  "shot",
+  "shots/mode-compressor.png",
+  ".dc-card .iso-plate",
+  2
+ ],
+ [
+  "click",
+  "[data-preset='20']"
+ ],
+ [
+  "wait",
+  2500
+ ],
+ [
+  "eval",
+  "(() => { const q = (s) => document.querySelector(s); const v = (k) => q(`[data-v='${k}']`).textContent; return 'прохладно: ' + v('mode') + ' · ФК ' + v('shareFC') + ' / КМ ' + v('shareDX') + ' · ' + [...document.querySelectorAll('[data-q]')].map((r) => r.dataset.q + '=' + r.querySelector('[data-num]').textContent).join(' ') + ' · ' + q('[data-v=equation]').textContent; })()"
+ ],
+ [
+  "shot",
+  "shots/mode-mixed.png",
+  ".dc-card .iso-plate",
+  2
+ ],
+ [
+  "key",
+  "ArrowRight",
+  "#dc-outdoor"
+ ],
+ [
+  "key",
+  "ArrowRight",
+  "#dc-outdoor"
+ ],
+ [
+  "wait",
+  300
+ ],
+ [
+  "eval",
+  "(() => { const pressed = [...document.querySelectorAll('[data-step]')].filter((b) => b.getAttribute('aria-pressed') === 'true').length; return 'ползунок стрелками: value=' + document.querySelector('#dc-outdoor').value + ' · выбранных шагов ' + pressed + ' · подпись ' + document.querySelector('[data-v=outdoor]').textContent; })()"
+ ],
+ [
+  "key",
+  " ",
+  "#dc-outdoor"
+ ],
+ [
+  "eval",
+  "'пробел на ползунке: пауза ' + document.querySelector('[data-act=pause]').getAttribute('aria-pressed')"
+ ],
+ [
+  "key",
+  "2",
+  ".dc-viewport"
+ ],
+ [
+  "eval",
+  "'клавиша 2: ' + document.querySelector('[data-v=stepTitle]').textContent + ' · выделено элементов ' + document.querySelectorAll('.it[data-on]').length + ' · focus=' + document.querySelector('.dc-stage').dataset.focus"
+ ],
+ [
+  "shot",
+  "shots/step-crac.png",
+  ".dc-card .iso-plate",
+  2
+ ],
+ [
+  "key",
+  "ArrowRight",
+  ".dc-viewport"
+ ],
+ [
+  "eval",
+  "'стрелка вправо: ' + document.querySelector('[data-v=stepTitle]').textContent"
+ ],
+ [
+  "key",
+  "ArrowLeft",
+  ".dc-viewport"
+ ],
+ [
+  "key",
+  "ArrowLeft",
+  ".dc-viewport"
+ ],
+ [
+  "eval",
+  "'стрелка влево ×2: ' + document.querySelector('[data-v=stepTitle]').textContent"
+ ],
+ [
+  "key",
+  "5",
+  ".dc-viewport"
+ ],
+ [
+  "eval",
+  "'клавиша 5: ' + document.querySelector('[data-v=stepTitle]').textContent + ' · выделено ' + document.querySelectorAll('.it[data-on]').length + ' · текст: ' + document.querySelector('[data-v=stepText]').textContent.slice(0, 90)"
+ ],
+ [
+  "shot",
+  "shots/step-modes.png",
+  ".dc-card .iso-plate",
+  2
+ ],
+ [
+  "click",
+  ".it[data-name='rack2.srv4']"
+ ],
+ [
+  "eval",
+  "'нажатие на сервер: ' + document.querySelector('[data-v=stepTitle]').textContent"
+ ],
+ [
+  "click",
+  ".it[data-name='dry.fan2']"
+ ],
+ [
+  "eval",
+  "'нажатие на вентилятор драйкулера: ' + document.querySelector('[data-v=stepTitle]').textContent"
+ ],
+ [
+  "click",
+  ".it[data-name='pump.motor']"
+ ],
+ [
+  "eval",
+  "'нажатие на насос: ' + document.querySelector('[data-v=stepTitle]').textContent"
+ ],
+ [
+  "click",
+  ".it[data-name='crac.comp.shell']"
+ ],
+ [
+  "eval",
+  "'нажатие на компрессор: ' + document.querySelector('[data-v=stepTitle]').textContent"
+ ],
+ [
+  "key",
+  " ",
+  ".dc-viewport"
+ ],
+ [
+  "eval",
+  "new Promise((done) => { const a = window.__dcFrames; setTimeout(() => done('пауза: aria-pressed=' + document.querySelector('[data-act=pause]').getAttribute('aria-pressed') + ' · кадров за 1 с: ' + (window.__dcFrames - a)), 1000); })"
+ ],
+ [
+  "eval",
+  "(() => { const before = JSON.stringify(window.__dc3d.firstMark); return new Promise((done) => setTimeout(() => done('маркер 3D на паузе: ' + before + ' → ' + JSON.stringify(window.__dc3d.firstMark)), 800)); })()"
+ ],
+ [
+  "click",
+  "[data-preset='-10']"
+ ],
+ [
+  "eval",
+  "'ползунок на паузе (сразу): ' + document.querySelector('[data-v=mode]').textContent + ' · ' + document.querySelector('[data-readout]').textContent"
+ ],
+ [
+  "key",
+  " ",
+  ".dc-viewport"
+ ],
+ [
+  "eval",
+  "new Promise((done) => { const a = window.__dcFrames; setTimeout(() => done('после паузы: кадров за 1 с: ' + (window.__dcFrames - a)), 1000); })"
+ ],
+ [
+  "click",
+  "[data-act='zoom']"
+ ],
+ [
+  "wait",
+  200
+ ],
+ [
+  "eval",
+  "'масштаб 3D: цель ' + (window.__dc3d ? document.querySelector('[data-act=zoom]').getAttribute('aria-pressed') : '-') + ' · показан ' + window.__dc3d.cam.zoom.toFixed(2) + ' · кнопка: ' + document.querySelector('[data-act=zoom]').textContent"
+ ],
+ [
+  "shot",
+  "shots/zoomed.png",
+  ".dc-card .iso-plate",
+  2
+ ],
+ [
+  "drag",
+  ".dc-viewport",
+  0.5,
+  0.5,
+  0.75,
+  0.62,
+  12
+ ],
+ [
+  "eval",
+  "'после перетаскивания: азимут ' + window.__dc3d.cam.az.toFixed(1) + ' · наклон ' + window.__dc3d.cam.el.toFixed(1) + ' · шаг ' + document.querySelector('[data-v=stepTitle]').textContent"
+ ],
+ [
+  "shot",
+  "shots/zoomed-drag.png",
+  ".dc-card .iso-plate",
+  2
+ ],
+ [
+  "key",
+  "Escape",
+  ".dc-viewport"
+ ],
+ [
+  "eval",
+  "'Escape: масштаб ' + window.__dc3d.cam.zoom.toFixed(2)"
+ ],
+ [
+  "click",
+  "[data-act='tour']"
+ ],
+ [
+  "eval",
+  "'показ: ' + document.querySelector('[data-act=tour]').getAttribute('aria-pressed') + ' · ' + document.querySelector('[data-v=stepTitle]').textContent"
+ ],
+ [
+  "wait",
+  6800
+ ],
+ [
+  "eval",
+  "'через 6,8 с: ' + document.querySelector('[data-v=stepTitle]').textContent"
+ ],
+ [
+  "key",
+  "3",
+  ".dc-viewport"
+ ],
+ [
+  "eval",
+  "'ручное управление: показ ' + document.querySelector('[data-act=tour]').getAttribute('aria-pressed') + ' · ' + document.querySelector('[data-v=stepTitle]').textContent"
+ ],
+ [
+  "click",
+  "[data-preset='35']"
+ ],
+ [
+  "key",
+  "к",
+  ".dc-viewport",
+  "KeyR"
+ ],
+ [
+  "eval",
+  "'R в русской раскладке: ' + document.querySelector('#dc-outdoor').value + ' °C · ' + document.querySelector('#dc-load').value + ' кВт · ' + document.querySelector('[data-v=stepTitle]').textContent + ' · пауза ' + document.querySelector('[data-act=pause]').getAttribute('aria-pressed')"
+ ],
+ [
+  "click",
+  "[data-preset='35']"
+ ],
+ [
+  "key",
+  "r",
+  ".dc-viewport"
+ ],
+ [
+  "eval",
+  "'R латиницей: ' + document.querySelector('#dc-outdoor').value + ' °C'"
+ ],
+ [
+  "key",
+  "e",
+  ".dc-viewport",
+  "KeyE"
+ ],
+ [
+  "wait",
+  1500
+ ],
+ [
+  "eval",
+  "'E: азимут ' + window.__dc3d.cam.az.toFixed(1) + ' · диктор: ' + document.querySelector('[data-status]').textContent"
+ ],
+ [
+  "key",
+  "у",
+  ".dc-viewport",
+  "KeyE"
+ ],
+ [
+  "wait",
+  1500
+ ],
+ [
+  "eval",
+  "'E в русской раскладке: азимут ' + window.__dc3d.cam.az.toFixed(1)"
+ ],
+ [
+  "key",
+  "w",
+  ".dc-viewport",
+  "KeyW"
+ ],
+ [
+  "wait",
+  1500
+ ],
+ [
+  "eval",
+  "'W: наклон ' + window.__dc3d.cam.el.toFixed(1)"
+ ],
+ [
+  "key",
+  "2",
+  ".dc-viewport"
+ ],
+ [
+  "key",
+  "x",
+  ".dc-viewport",
+  "KeyX"
+ ],
+ [
+  "wait",
+  400
+ ],
+ [
+  "eval",
+  "'X на шаге 2: ' + document.querySelector('[data-act=explode]').textContent + ' · pressed ' + document.querySelector('[data-act=explode]').getAttribute('aria-pressed') + ' · диктор: ' + document.querySelector('[data-status]').textContent"
+ ],
+ [
+  "wait",
+  9000
+ ],
+ [
+  "eval",
+  "'часы узлов: ' + Array.from(window.__dc3d.st.T).map((v) => v.toFixed(2)).join(' ')"
+ ],
+ [
+  "key",
+  "r",
+  ".dc-viewport"
+ ],
+ [
+  "wait",
+  9000
+ ],
+ [
+  "eval",
+  "'R: азимут ' + window.__dc3d.cam.az.toFixed(1) + ' наклон ' + window.__dc3d.cam.el.toFixed(1) + ' · часы ' + Array.from(window.__dc3d.st.T).map((v) => v.toFixed(2)).join(' ') + ' · кнопка ' + document.querySelector('[data-act=explode]').textContent"
+ ],
+ [
+  "eval",
+  "'переполнение: scrollWidth=' + document.documentElement.scrollWidth + ' innerWidth=' + innerWidth"
+ ],
+ [
+  "eval",
+  "'ресурсы: ' + JSON.stringify(performance.getEntriesByType('resource').map((e) => e.name)) + ' · внешних src/href: ' + [...document.querySelectorAll('[src],link[href],[style*=url]')].length"
+ ],
+ [
+  "eval",
+  "'статус для диктора: ' + document.querySelector('[data-status]').textContent"
+ ],
+ [
+  "eval",
+  "new Promise((done) => { Object.defineProperty(document, 'hidden', { value: true, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); setTimeout(() => { const a = window.__dcFrames; setTimeout(() => { Object.defineProperty(document, 'hidden', { value: false, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); done('скрытая вкладка: кадров за 1 с: ' + (window.__dcFrames - a)); }, 1000); }, 200); })"
+ ]
+]
