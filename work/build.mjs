@@ -1529,11 +1529,19 @@ const BODY = `
           <div class="iso-plate-corners" aria-hidden="true">
             <span class="iso-plate-corner" data-corner="fig">Рис. 1</span>
             <span class="iso-plate-corner" data-corner="title">Зал · улица</span>
-            <span class="iso-plate-corner" data-corner="hint"><span class="dc-wide dc-only3d">Тяните — вращение · X — разборка · F — экран · 1–5</span><span class="dc-narrow dc-only3d">Тяните — вращение · 1–5</span><span class="dc-wide dc-only2d">Нажмите на узел · 1–5 · ← → · F — экран · R</span><span class="dc-narrow dc-only2d">Нажмите на узел · 1–5</span></span>
+            <span class="iso-plate-corner" data-corner="hint" data-hint>Нажмите на узел · 1–5</span>
             <span class="iso-plate-corner" data-corner="readout" data-readout></span>
           </div>
-          <button class="dc-full" type="button" data-act="full-icon" aria-label="Во весь экран (F)" title="Во весь экран (F)"><svg viewBox="0 0 16 16" aria-hidden="true"><path class="dc-full-in" d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/><path class="dc-full-out" d="M6 2v4H2M14 6h-4V2M10 14v-4h4M2 10h4v4"/></svg></button>
-          <div class="dc-viewport" tabindex="0" role="group" aria-label="Разрез установки. Тяните, чтобы вращать сцену; Q и E поворачивают, W и S меняют наклон, X разбирает выбранный узел или всю установку на детали, F разворачивает рисунок на весь экран. Нажмите на стойки, кондиционер, трубы или драйкулер, чтобы выбрать узел. Escape возвращает обычный масштаб и выходит из полного экрана.">
+          <div class="dc-tools" role="toolbar" aria-label="Просмотр модели">
+            <button class="dc-tool" type="button" data-act="zoom-in" aria-label="Приблизить (+)" title="Приблизить (+)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>
+            <output class="dc-zoom-level" aria-hidden="true">×1,0</output>
+            <button class="dc-tool" type="button" data-act="zoom-out" aria-label="Отдалить (−)" title="Отдалить (−)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10"/></svg></button>
+            <button class="dc-tool dc-only3d" type="button" data-act="pan-mode" aria-pressed="false" aria-label="Сдвиг вместо вращения" title="Сдвиг вместо вращения (Shift или правая кнопка)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5v13M1.5 8h13M8 1.5 6 3.5M8 1.5l2 2M8 14.5l-2-2M8 14.5l2-2M1.5 8l2-2M1.5 8l2 2M14.5 8l-2-2M14.5 8l-2 2"/></svg></button>
+            <button class="dc-tool" type="button" data-act="view-reset" aria-label="Исходный масштаб (0)" title="Исходный масштаб (0)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9M2.5 2.5v2.4h2.4"/></svg></button>
+            <button class="dc-tool" type="button" data-act="full-icon" aria-pressed="false" aria-label="Модель во весь экран (F)" title="Модель во весь экран (F)"><svg viewBox="0 0 16 16" aria-hidden="true"><path class="dc-full-in" d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/><path class="dc-full-out" d="M6 2v4H2M14 6h-4V2M10 14v-4h4M2 10h4v4"/></svg></button>
+          </div>
+          <p class="dc-wheel-hint" aria-hidden="true">Масштаб: Ctrl + колесо, щипок или двойной клик</p>
+          <div class="dc-viewport" tabindex="0" role="group" aria-label="Разрез установки. Тяните, чтобы вращать сцену; Q и E поворачивают, W и S меняют наклон, X разбирает выбранный узел или всю установку на детали. Плюс и минус меняют масштаб, Shift со стрелками сдвигает увеличенный вид, 0 возвращает исходный масштаб, двойной клик приближает деталь под указателем. F разворачивает модель на весь экран. Нажмите на стойки, кондиционер, трубы или драйкулер, чтобы выбрать узел. Escape возвращает обычный масштаб и выходит из полного экрана.">
             <div class="dc-zoomer">${svg}<canvas class="dc-view3d" aria-hidden="true"></canvas></div>
           </div>
           <p class="dc-sr" role="status" aria-live="polite" data-status></p>
@@ -1604,7 +1612,7 @@ const BODY = `
           <button class="dc-btn" type="button" data-act="tour" aria-pressed="false">Автопоказ</button>
           <button class="dc-btn" type="button" data-act="pause" aria-pressed="false">Пауза</button>
           <button class="dc-btn" type="button" data-act="zoom" aria-pressed="false">Увеличить ×1.6</button>
-          <button class="dc-btn" type="button" data-act="full" aria-pressed="false">Во весь экран</button>
+          <button class="dc-btn" type="button" data-act="full" aria-pressed="false">Модель во весь экран</button>
           <button class="dc-btn" type="button" data-act="reset">Сброс</button>
         </div>
         <div class="dc-buttons dc-view-buttons dc-only3d" role="group" aria-label="Вид">
@@ -1612,14 +1620,14 @@ const BODY = `
           <button class="dc-btn" type="button" data-act="turn-right" aria-label="Повернуть сцену вправо на 30°">↻ 30°</button>
           <button class="dc-btn" type="button" data-act="explode" aria-pressed="false">Разобрать</button>
         </div>
-        <p class="dc-hint">Клавиши: 1–5 — узлы, ← → — шаги, пробел — пауза, R — сброс, F — во весь экран, Escape — обычный масштаб и выход из полного экрана.<span class="dc-only3d"> Q / E — поворот, W / S — наклон, X — разобрать или собрать (выбранный узел или всю установку); мышью: тянуть — вращение, Shift или правая кнопка — сдвиг.</span> Ползунки слушают стрелки сами.</p>
+        <p class="dc-hint">Клавиши: 1–5 — узлы, ← → — шаги, пробел — пауза, R — сброс, F — модель во весь экран, + и − — масштаб, 0 — исходный масштаб, Shift + стрелки — сдвиг увеличенного вида, Escape — обычный масштаб и выход из полного экрана. Мышью: Ctrl + колесо (на весь экран — просто колесо) приближает к указателю, двойной клик подгоняет деталь под кадр и называет её, Shift + двойной клик отдаляет; на сенсорном экране — щипок и двойное касание.<span class="dc-only3d"> Q / E — поворот, W / S — наклон, X — разобрать или собрать (выбранный узел или всю установку); мышью: тянуть — вращение, Shift или правая кнопка — сдвиг.</span> Ползунки слушают стрелки сами.</p>
       </section>
     </aside>
   </div>
   <details class="dc-details">
     <summary>Что принято в этой учебной модели</summary>
     <ul>
-      <li><b>3D-вид.</b> Сцена вращается, разбирается и разворачивается на весь экран (кнопка в углу рисунка или F) в браузере на WebGL. Меши строятся из тех же форм деталей, что проверяет аудит Anatomy (призмы, тела вращения, трубы), линии и винты рисунка перенесены на поверхности деталей; разлёт деталей — иллюстрация состава узлов, а не порядок реального монтажа. Оттенки меди и латуни, контактные тени и светодиоды — оформление, а не паспортные цвета. Без WebGL страница показывает изометрический SVG-рисунок.</li>
+      <li><b>3D-вид.</b> Сцена вращается, разбирается, приближается до ×12 к точке под указателем (Ctrl + колесо, щипок, кнопки + и −; во весь экран — просто колесо) и разворачивается на весь экран отдельно от страницы (кнопка в углу рисунка или F). Двойной клик или двойное касание подгоняет деталь под кадр и подписывает её название, в том числе в разобранном виде. Меши строятся из тех же форм деталей, что проверяет аудит Anatomy (призмы, тела вращения, трубы), линии и винты рисунка перенесены на поверхности деталей; разлёт деталей — иллюстрация состава узлов, а не порядок реального монтажа. Оттенки меди и латуни, контактные тени и светодиоды — оформление, а не паспортные цвета. Без WebGL страница показывает изометрический SVG-рисунок.</li>
       <li><b>Путь воздуха сверен с руководствами.</b> Перфорированные плиты стоят только в холодном коридоре, стойки обращены к нему лицевыми панелями, горячий воздух выходит назад и возвращается к кондиционеру; кондиционер ставят в конце горячего коридора или подводят к нему возврат через верхний канал. На сцене горячий коридор закрыт колпаком, воздух идёт по каналу в верхний вход кондиционера, через фильтр и ряды теплообменника вниз, вентилятором в подполье. Вентилятор внизу блока соответствует исполнению с подачей вниз (в HPM Extended DOWN модуль вентиляторов стоит в фальшполу).</li>
       <li><b>Цвет воздуха следует из модели.</b> Подача 22 °C, возврат T_return, воздух между рядами T_between: в фрикулинге воздух остывает уже в рядах фрикулинга, в компрессорном режиме — только в рядах испарителя. Воздух за драйкулером в балансе не участвует; его нагрев показан при условном расходе 10 кВт/К на полной скорости вентиляторов (с замедлением вентиляторов нагрев растёт), но не выше температуры горячей смеси. Сквозь рёбра теплообменников, фильтр и крыльчатку поток виден наполовину.</li>
       <li><b>Режимы видны в движении.</b> В фрикулинге хладагент стоит и компрессорная лампа погашена; в мороз вентиляторы драйкулера замедляются (регулирование теплоотдачи). В смешанном режиме работают обе ветки смеси и холодильный контур, в компрессорном смесь идёт только через конденсатор. Светодиоды активности серверов мигают чаще при большей нагрузке.</li>

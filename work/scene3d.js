@@ -1380,6 +1380,17 @@ void main(){vId=aMeta.w;gl_Position=clipOf(turn(aPos,aMeta.y)+offsetOf(aMove,aMe
     pick,
     project,
     frame: () => ({ ...view }),
+    // рамка детали в мире с текущим смещением разборки (как offsetOf в вершинном шейдере)
+    itemBox(index) {
+      const b = BOXES.get(index);
+      if (!b) return null;
+      const { move, meta } = META[index];
+      const u = meta[0];
+      const x = Math.min(1, Math.max(0, (st.T[u] - move[3]) / D.explode.duration));
+      const share = x * x * (3 - 2 * x);
+      const off = [0, 1, 2].map((k) => move[k] * share + st.UM[u * 3 + k] * st.U[u]);
+      return { min: [0, 1, 2].map((k) => b[k] + off[k]), max: [0, 1, 2].map((k) => b[k + 3] + off[k]) };
+    },
     shadows,
     viewDir,
     setMarks,

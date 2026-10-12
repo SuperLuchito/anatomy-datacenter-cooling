@@ -1,0 +1,8 @@
+[
+  ["wait", 6000],
+  ["shot", "shots/3d/phone.png", ".dc-card", 1],
+  ["click", "[data-act=\"full-icon\"]"],
+  ["wait", 1500],
+  ["eval", "JSON.stringify({w: innerWidth, h: innerHeight, sw: document.documentElement.scrollWidth, stage: (() => { const r = document.querySelector('.dc-stage').getBoundingClientRect(); return [r.width, r.height].map(Math.round); })(), canvas: [document.querySelector('.dc-view3d').clientWidth, document.querySelector('.dc-view3d').clientHeight], hint: document.querySelector('[data-hint]').textContent})"],
+  ["shot", "shots/3d/phone-full.png", ".dc-stage", 1]
+]

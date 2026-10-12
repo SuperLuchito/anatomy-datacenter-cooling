@@ -150,6 +150,8 @@ if (scene) {
   pageRoot.setAttribute("data-3d", "");
 }
 window.__dc3d = scene;
+// крючок для проверок: имена деталей сцены по номеру
+window.__dcItems = DATA.scene.items.map((item) => item.n);
 // тема артефакта меняется у зрителя на лету: SVG следует за токенами сам, 3D-сцене нужно перечитать цвета
 window.addEventListener("dc-theme", (event) => {
   scene?.setTheme(event.detail);
@@ -159,6 +161,11 @@ function leave3d() {
   scene = null;
   stage.removeAttribute("data-3d");
   pageRoot.removeAttribute("data-3d");
+  // SVG-рисунок начинает с исходного масштаба
+  Object.assign(state, { zoom: 1, pan: [0, 0], focusPart: null });
+  applyPan();
+  zoomUi();
+  updateHint();
   redraw();
 }
 
@@ -472,7 +479,8 @@ function render() {
   setText(ui.stepCount, state.step >= 0 ? `шаг ${state.step + 1} из 5` : "узел не выбран");
   // во время разборки угол говорит о ней: фаза и список узлов берутся из тех же часов, что двигают детали
   const apart = scene ? unitClock.map((u, i) => (u.c > 0 || u.target > 0 ? UNITS[i] : null)).filter(Boolean) : [];
-  if (apart.length) {
+  if (state.focusPart && scene) setText(readout, `${state.focusPart} · ${fmtZoom(viewTarget.zoom)}`);
+  else if (apart.length) {
     const opening = unitClock.some((u) => u.target > 0);
     const moving = explodeMoving();
     const names = apart.length > 3 ? `${apart.length} узлов` : apart.map((u) => u.title).join(", ");
@@ -668,37 +676,185 @@ function setPaused(paused) {
     run();
   }
 }
-function setZoom(zoom) {
-  if (scene) {
-    // 3D: масштаб камеры вокруг центра холста, без CSS-преобразования
-    const from = viewTarget.zoom;
-    const frame = scene.frame();
-    const centre = [frame.w / 2, frame.h / 2];
-    const rest = scene.project(DATA.scene.centre);
-    const o = [rest[0], rest[1]];
-    if (zoom === 1) viewTarget.pan = [0, 0];
-    else viewTarget.pan = [0, 1].map((i) => centre[i] - (centre[i] - o[i]) * (zoom / from) - (o[i] - viewShown.pan[i]));
-    viewTarget.zoom = zoom;
-    if (still.matches) Object.assign(viewShown, { zoom, pan: [...viewTarget.pan] });
-    state.zoom = zoom;
-    ui.zoom.setAttribute("aria-pressed", String(zoom !== 1));
-    setText(ui.zoom, zoom === 1 ? "Увеличить ×1.6" : "Обычный масштаб ×1");
-    viewport.toggleAttribute("data-zoomed", zoom !== 1);
-    run();
-    redraw();
-    return;
-  }
-  state.zoom = zoom;
-  if (zoom === 1) state.pan = [0, 0];
-  else {
-    const box = viewport.getBoundingClientRect();
-    state.pan = [-(zoom - 1) * box.width * 0.45, -(zoom - 1) * box.height * 0.5];
-  }
-  applyPan();
-  ui.zoom.setAttribute("aria-pressed", String(zoom !== 1));
-  setText(ui.zoom, zoom === 1 ? "Увеличить ×1.6" : "Обычный масштаб ×1");
-  viewport.toggleAttribute("data-zoomed", zoom !== 1);
+// ── масштаб: плавный, к точке под указателем. В 3D меняются масштаб и сдвиг камеры, в SVG — CSS-преобразование ──
+const K0 = DATA.scene.camera.k;
+const Z3 = [0.5, 12];
+const Z2 = [1, 6];
+const zoomLevel = $(".dc-zoom-level");
+const fmtZoom = (z) => `×${(z < 9.95 ? z.toFixed(1) : String(Math.round(z))).replace(".", ",")}`;
+// исходный кадр: при общей разборке камера стоит дальше (см. setExplode)
+const zoomBase = () => (explodeView.held ? { zoom: 0.74, pan: [0, 34] } : { zoom: 1, pan: [0, 0] });
+function isZoomed() {
+  if (!scene) return state.zoom > 1.001;
+  const base = zoomBase();
+  return Math.abs(viewTarget.zoom - base.zoom) > 0.01 || Math.hypot(viewTarget.pan[0] - base.pan[0], viewTarget.pan[1] - base.pan[1]) > 0.5;
+}
+function zoomUi() {
+  const z = scene ? viewTarget.zoom : state.zoom;
+  const zoomed = isZoomed();
+  if (scene) state.zoom = z;
+  if (!zoomed) state.focusPart = null;
+  viewport.toggleAttribute("data-zoomed", zoomed);
+  ui.zoom.setAttribute("aria-pressed", String(zoomed));
+  setText(ui.zoom, zoomed ? "Обычный масштаб" : "Увеличить ×1.6");
+  if (zoomLevel) setText(zoomLevel, fmtZoom(z));
+}
+// экранная точка центра сцены без сдвига камеры: от неё считаются сдвиги
+function restOrigin() {
+  const p = scene.project(DATA.scene.centre);
+  return [p[0] - scene.cam.pan[0], p[1] - scene.cam.pan[1]];
+}
+// сцена не уходит из кадра целиком: центр модели остаётся не дальше её полуразмера от края
+function clampPan3d() {
+  const f = scene.frame();
+  const o = restOrigin();
+  const c = [f.w / 2, f.h / 2];
+  const lim = [c[0] + K0 * viewTarget.zoom * 330, c[1] + K0 * viewTarget.zoom * 230];
+  viewTarget.pan = [0, 1].map((i) => clampTo(o[i] + viewTarget.pan[i] - c[i], -lim[i], lim[i]) + c[i] - o[i]);
+}
+function settleZoom(now) {
+  if (scene && (now || still.matches)) Object.assign(viewShown, { zoom: viewTarget.zoom, pan: [...viewTarget.pan] });
+  zoomUi();
+  run();
   redraw();
+}
+// масштаб в factor раз; точка под указателем (или центр кадра) остаётся на месте
+function zoomAt(factor, clientX, clientY, now = false) {
+  const box = viewport.getBoundingClientRect();
+  if (scene) {
+    const f = scene.frame();
+    const s = clientX == null ? [f.w / 2, f.h / 2] : [((clientX - box.left) / box.width) * f.w, ((clientY - box.top) / box.height) * f.h];
+    const z1 = viewTarget.zoom;
+    const z2 = clampTo(z1 * factor, Z3[0], Z3[1]);
+    const o = restOrigin();
+    viewTarget.pan = [0, 1].map((i) => viewTarget.pan[i] + (s[i] - o[i] - viewTarget.pan[i]) * (1 - z2 / z1));
+    viewTarget.zoom = z2;
+    clampPan3d();
+  } else {
+    const p = clientX == null ? [box.width / 2, box.height / 2] : [clientX - box.left, clientY - box.top];
+    const z1 = state.zoom;
+    const z2 = clampTo(z1 * factor, Z2[0], Z2[1]);
+    state.pan = [0, 1].map((i) => p[i] - ((p[i] - state.pan[i]) * z2) / z1);
+    state.zoom = z2;
+    applyPan();
+  }
+  settleZoom(now);
+}
+// сдвиг вида на экранные пиксели
+function panBy(dx, dy) {
+  if (scene) {
+    const k = scene.frame().w / viewport.getBoundingClientRect().width;
+    viewTarget.pan = [viewTarget.pan[0] + dx * k, viewTarget.pan[1] + dy * k];
+    clampPan3d();
+    Object.assign(viewShown, { pan: [...viewTarget.pan] });
+  } else {
+    state.pan = [state.pan[0] + dx, state.pan[1] + dy];
+    applyPan();
+  }
+  zoomUi();
+  redraw();
+}
+function resetZoom() {
+  state.focusPart = null;
+  if (scene) {
+    const base = zoomBase();
+    viewTarget.zoom = base.zoom;
+    viewTarget.pan = [...base.pan];
+  } else {
+    state.zoom = 1;
+    state.pan = [0, 0];
+    applyPan();
+  }
+  settleZoom(false);
+}
+// Названия деталей для подписи при приближении: первое совпадение по имени детали в сцене
+const PART_NAMES = [
+  [/^rack\d\.srv/, "Сервер"],
+  [/^rack\d\.roof/, "Крыша серверной стойки"],
+  [/^rack\d\.back/, "Задняя перфорированная дверь стойки"],
+  [/^rack\d\.(rail|post)/, "Монтажный профиль стойки"],
+  [/^rack\d\./, "Серверная стойка"],
+  [/^duct\.box/, "Переходный короб на входе кондиционера"],
+  [/^duct\.post/, "Опора канала"],
+  [/^duct\./, "Колпак и канал возврата горячего воздуха"],
+  [/^crac\.coil\.fc/, "Ряды фрикулинга теплообменника"],
+  [/^crac\.coil\.dx/, "Ряды испарителя теплообменника"],
+  [/^crac\.filter/, "Воздушный фильтр кондиционера"],
+  [/^crac\.fan\.motor/, "Двигатель вентилятора кондиционера"],
+  [/^crac\.fan/, "Вентилятор кондиционера"],
+  [/^crac\.comp/, "Компрессор"],
+  [/^crac\.bphe/, "Пластинчатый конденсатор"],
+  [/^crac\.valve12/, "Регулирующий клапан фрикулинга (12)"],
+  [/^crac\.valve13/, "Соленоидный клапан конденсатора (13)"],
+  [/^crac\.txv/, "Терморегулирующий вентиль"],
+  [/^crac\.receiver/, "Ресивер хладагента"],
+  [/^crac\.drier/, "Фильтр-осушитель"],
+  [/^crac\.sight/, "Смотровое стекло"],
+  [/^crac\.ctrl/, "Контроллер кондиционера"],
+  [/^crac\.stand/, "Подставка кондиционера под фальшполом"],
+  [/^crac\./, "Корпус кондиционера"],
+  [/^ref\.suction/, "Линия всасывания хладагента"],
+  [/^ref\.discharge/, "Линия нагнетания хладагента"],
+  [/^ref\.liquid/, "Жидкостная линия хладагента"],
+  [/^glycol\.valve/, "Запорный кран"],
+  [/^glycol\.strainer/, "Сетчатый фильтр"],
+  [/^glycol\.gauge/, "Манометр"],
+  [/^glycol\.vent/, "Автоматический воздухоотводчик"],
+  [/^glycol\.relief/, "Предохранительный клапан"],
+  [/^glycol\.tank/, "Расширительный бак"],
+  [/^glycol\.support/, "Опора трубопровода"],
+  [/^glycol\.(supply|crac\.supply|crac\.fc\.in|crac\.cond\.in)/, "Подача смеси"],
+  [/^glycol\./, "Трубопровод водно-гликолевой смеси"],
+  [/^pump\.motor/, "Двигатель насоса"],
+  [/^pump\./, "Циркуляционный насос"],
+  [/^dry\.fan/, "Вентилятор драйкулера"],
+  [/^dry\.coil/, "Теплообменник драйкулера"],
+  [/^dry\.header/, "Коллектор драйкулера"],
+  [/^dry\.ebox/, "Электрощит драйкулера"],
+  [/^dry\./, "Драйкулер"],
+];
+const partName = (name) => PART_NAMES.find(([re]) => re.test(name))?.[1] ?? "Деталь";
+// подогнать деталь под кадр: её рамка занимает около половины кадра, центр рамки — в центре
+function focusPart(index) {
+  const item = DATA.scene.items[index];
+  const box = item && scene.itemBox(index);
+  if (!box) return false;
+  const f = scene.frame();
+  const o = restOrigin();
+  const k = K0 * scene.cam.zoom;
+  const uO = [o[0] + scene.cam.pan[0], o[1] + scene.cam.pan[1]];
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (let i = 0; i < 8; i++) {
+    const p = scene.project([0, 1, 2].map((a) => (i & (1 << a) ? box.max[a] : box.min[a])));
+    x0 = Math.min(x0, p[0]);
+    x1 = Math.max(x1, p[0]);
+    y0 = Math.min(y0, p[1]);
+    y1 = Math.max(y1, p[1]);
+  }
+  const centre = [((x0 + x1) / 2 - uO[0]) / k, ((y0 + y1) / 2 - uO[1]) / k];
+  const size = [Math.max((x1 - x0) / k, 2), Math.max((y1 - y0) / k, 2)];
+  const zoom = clampTo(Math.min((f.w * 0.5) / (K0 * size[0]), (f.h * 0.5) / (K0 * size[1])), Z3[0], Z3[1]);
+  viewTarget.zoom = zoom;
+  viewTarget.pan = [f.w / 2 - K0 * zoom * centre[0] - o[0], f.h / 2 - K0 * zoom * centre[1] - o[1]];
+  state.focusPart = partName(item.n);
+  state.focusIndex = index;
+  settleZoom(false);
+  announce(`${state.focusPart}, масштаб ${fmtZoom(zoom)}`);
+  return true;
+}
+// двойной клик или двойное касание: деталь под указателем — под кадр, пустое место — вдвое ближе
+function zoomToPoint(x, y, out) {
+  if (out) return zoomAt(0.5, x, y);
+  if (scene) {
+    const index = scene.pick(x, y);
+    const item = DATA.scene.items[index];
+    const again = index === state.focusIndex && isZoomed();
+    if (item && !again && !/^(stand|floor)\./.test(item.n) && focusPart(index)) return;
+  }
+  zoomAt(2, x, y);
 }
 function applyPan() {
   if (scene) {
@@ -709,7 +865,7 @@ function applyPan() {
   const minX = -(state.zoom - 1) * box.width;
   const minY = -(state.zoom - 1) * box.height;
   state.pan = [clampTo(state.pan[0], minX, 0), clampTo(state.pan[1], minY, 0)];
-  zoomer.style.transform = state.zoom === 1 ? "" : `translate(${state.pan[0].toFixed(1)}px, ${state.pan[1].toFixed(1)}px) scale(${state.zoom})`;
+  zoomer.style.transform = state.zoom <= 1.001 ? "" : `translate(${state.pan[0].toFixed(1)}px, ${state.pan[1].toFixed(1)}px) scale(${state.zoom.toFixed(4)})`;
 }
 function reset() {
   stopTour();
@@ -718,12 +874,12 @@ function reset() {
   state.shown = { ...DEFAULT };
   ui.outdoor.value = String(DEFAULT.outdoor);
   ui.load.value = String(DEFAULT.load);
-  setZoom(1);
   if (scene) {
     Object.assign(viewTarget, { ...VIEW_REST, pan: [0, 0] });
     if (isOpen()) setExplode(false);
     describeView();
   }
+  resetZoom();
   for (const flow of flows) flow.phase = 0;
   select(-1);
   recompute();
@@ -780,7 +936,30 @@ $("[data-act='reset']").addEventListener("click", () => {
 });
 ui.zoom.addEventListener("click", () => {
   touched();
-  setZoom(state.zoom === 1 ? 1.6 : 1);
+  if (isZoomed()) resetZoom();
+  else zoomAt(1.6);
+});
+$("[data-act='zoom-in']")?.addEventListener("click", () => {
+  touched();
+  zoomAt(1.5);
+});
+$("[data-act='zoom-out']")?.addEventListener("click", () => {
+  touched();
+  zoomAt(1 / 1.5);
+});
+$("[data-act='view-reset']")?.addEventListener("click", () => {
+  touched();
+  resetZoom();
+  announce("Исходный масштаб");
+});
+let panMode = false;
+const panButton = $("[data-act='pan-mode']");
+panButton?.addEventListener("click", () => {
+  touched();
+  panMode = !panMode;
+  panButton.setAttribute("aria-pressed", String(panMode));
+  viewport.toggleAttribute("data-panmode", panMode);
+  announce(panMode ? "Перетаскивание сдвигает вид" : "Перетаскивание вращает сцену");
 });
 ui3d.explode?.addEventListener("click", () => {
   touched();
@@ -795,34 +974,54 @@ ui3d.right?.addEventListener("click", () => {
   turnView(30);
 });
 
-// Полный экран: раскладка с рисунком и панелью уходит во весь экран через Fullscreen API;
-// где API нет или запрос отклонён (iPhone, встроенные окна), остаётся та же раскладка поверх страницы.
-const layout = $(".dc-layout");
+// Полный экран: только рисунок модели с панелью просмотра, через Fullscreen API; где API нет или запрос
+// отклонён (iPhone, встроенные окна), рисунок закрывает окно поверх страницы.
 const fullButtons = $$("[data-act='full'], [data-act='full-icon']");
-const isFull = () => layout.hasAttribute("data-full");
+const isFull = () => stage.hasAttribute("data-full");
 const nativeFull = () => document.fullscreenElement ?? document.webkitFullscreenElement ?? null;
+const hintEl = $("[data-hint]");
+const narrow = matchMedia("(max-width: 560px)");
+const coarse = matchMedia("(pointer: coarse)");
+function updateHint() {
+  if (!hintEl) return;
+  const full = isFull();
+  let text;
+  if (scene) {
+    if (full) text = coarse.matches ? "Палец — вращение · два пальца — масштаб и сдвиг · двойное касание — к детали" : "Колесо — масштаб · двойной клик — к детали · Shift или правая кнопка — сдвиг";
+    else text = narrow.matches ? "Тяните — вращение · два пальца — масштаб" : "Тяните — вращение · Ctrl + колесо — масштаб · F — экран";
+  } else if (full) text = "Колесо — масштаб · тяните — сдвиг";
+  else text = narrow.matches ? "Нажмите на узел · 1–5" : "Нажмите на узел · 1–5 · Ctrl + колесо — масштаб · F — экран";
+  setText(hintEl, text);
+}
+narrow.addEventListener?.("change", updateHint);
+coarse.addEventListener?.("change", updateHint);
 function setFull(on) {
   if (on === isFull()) return;
-  layout.toggleAttribute("data-full", on);
+  stage.toggleAttribute("data-full", on);
   document.documentElement.toggleAttribute("data-dc-full", on);
   if (on) {
-    const request = layout.requestFullscreen ?? layout.webkitRequestFullscreen;
+    const request = stage.requestFullscreen ?? stage.webkitRequestFullscreen;
     try {
-      const result = request?.call(layout);
+      const result = request?.call(stage);
       result?.catch?.(() => {});
     } catch {
-      // остаётся раскладка поверх страницы
+      // остаётся рисунок поверх страницы
     }
-  } else if (nativeFull() === layout) {
+  } else if (nativeFull() === stage) {
     (document.exitFullscreen ?? document.webkitExitFullscreen)?.call(document)?.catch?.(() => {});
   }
   for (const button of fullButtons) {
     button.setAttribute("aria-pressed", String(on));
-    const label = on ? "Выйти из полного экрана" : "Во весь экран";
-    if (button.dataset.act === "full") setText(button, label);
-    else button.setAttribute("aria-label", `${label} (F)`), (button.title = `${label} (F)`);
+    if (button.dataset.act === "full") setText(button, on ? "Выйти из полного экрана" : "Модель во весь экран");
+    else {
+      const label = on ? "Выйти из полного экрана (F)" : "Модель во весь экран (F)";
+      button.setAttribute("aria-label", label);
+      button.title = label;
+    }
   }
-  announce(on ? "Рисунок во весь экран" : "Обычный вид страницы");
+  updateHint();
+  announce(on ? "Модель во весь экран. Колесо или плюс и минус меняют масштаб, Escape — выход" : "Обычный вид страницы");
+  if (on) viewport.focus({ preventScroll: true });
   requestAnimationFrame(() => {
     applyPan();
     redraw();
@@ -839,22 +1038,80 @@ for (const type of ["fullscreenchange", "webkitfullscreenchange"])
     else redraw();
   });
 
-// нажатие на узел рисунка и перетаскивание увеличенной сцены
+// колесо: на странице масштаб только с Ctrl (или щипок тачпада), чтобы колесо листало страницу; во весь экран — всегда
+const wheelHint = $(".dc-wheel-hint");
+let wheelHintTimer = 0;
+viewport.addEventListener(
+  "wheel",
+  (event) => {
+    if (!isFull() && !event.ctrlKey && !event.metaKey) {
+      if (!wheelHint) return;
+      stage.setAttribute("data-wheel-hint", "");
+      clearTimeout(wheelHintTimer);
+      wheelHintTimer = setTimeout(() => stage.removeAttribute("data-wheel-hint"), 1400);
+      return;
+    }
+    event.preventDefault();
+    touched();
+    const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 400 : 1;
+    zoomAt(Math.exp(-clampTo(event.deltaY * unit, -60, 60) * 0.0045), event.clientX, event.clientY);
+  },
+  { passive: false },
+);
+viewport.addEventListener("dblclick", (event) => {
+  event.preventDefault();
+  touched();
+  zoomToPoint(event.clientX, event.clientY, event.shiftKey);
+});
+
+// указатели: мышь или палец — вращение (Shift, правая или средняя кнопка, режим сдвига — сдвиг);
+// два пальца — масштаб щипком и сдвиг; нажатие без перетаскивания выбирает узел детали
 let drag = null;
+let pinch = null;
+let lastTap = null;
+const touches = new Map();
+const pinchOf = () => {
+  const [a, b] = [...touches.values()];
+  return { d: Math.hypot(a[0] - b[0], a[1] - b[1]), m: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] };
+};
 viewport.addEventListener("pointerdown", (event) => {
   touched();
+  if (event.pointerType === "touch") {
+    touches.set(event.pointerId, [event.clientX, event.clientY]);
+    if (touches.size === 2) {
+      pinch = pinchOf();
+      drag = null;
+      viewport.removeAttribute("data-dragging");
+      for (const id of touches.keys())
+        try {
+          viewport.setPointerCapture(id);
+        } catch {
+          // указатель уже отпущен
+        }
+      return;
+    }
+    if (touches.size > 2) return;
+  }
   if (scene) {
-    if (event.button !== 0 && event.button !== 2) return;
-    drag = { id: event.pointerId, x: event.clientX, y: event.clientY, az: viewTarget.az, el: viewTarget.el, pan: [...viewTarget.pan], moved: false, shift: event.shiftKey || event.button === 2, touch: event.pointerType === "touch" };
+    if (event.button > 2) return;
+    drag = { id: event.pointerId, x: event.clientX, y: event.clientY, az: viewTarget.az, el: viewTarget.el, pan: [...viewTarget.pan], moved: false, shift: panMode || event.shiftKey || event.button !== 0, touch: event.pointerType === "touch" };
     return;
   }
-  if (state.zoom === 1 || event.button !== 0) return;
-  drag = { id: event.pointerId, x: event.clientX, y: event.clientY, pan: [...state.pan], moved: false };
+  if (event.button !== 0) return;
+  drag = { id: event.pointerId, x: event.clientX, y: event.clientY, pan: [...state.pan], moved: false, still: !isZoomed() };
 });
 viewport.addEventListener("contextmenu", (event) => {
   if (scene) event.preventDefault();
 });
 viewport.addEventListener("pointermove", (event) => {
+  if (touches.has(event.pointerId)) touches.set(event.pointerId, [event.clientX, event.clientY]);
+  if (pinch && touches.size >= 2) {
+    const next = pinchOf();
+    if (pinch.d > 1 && next.d > 1) zoomAt(next.d / pinch.d, next.m[0], next.m[1], true);
+    panBy(next.m[0] - pinch.m[0], next.m[1] - pinch.m[1]);
+    pinch = next;
+    return;
+  }
   if (!drag || event.pointerId !== drag.id) return;
   const dx = event.clientX - drag.x;
   const dy = event.clientY - drag.y;
@@ -864,26 +1121,47 @@ viewport.addEventListener("pointermove", (event) => {
     viewport.setAttribute("data-dragging", "");
   }
   if (drag.moved && scene) {
-    const box = viewport.getBoundingClientRect();
-    const toVb = scene.frame().w / box.width;
-    if (drag.shift) viewTarget.pan = [drag.pan[0] + dx * toVb, drag.pan[1] + dy * toVb];
-    else {
+    const toVb = scene.frame().w / viewport.getBoundingClientRect().width;
+    if (drag.shift) {
+      viewTarget.pan = [drag.pan[0] + dx * toVb, drag.pan[1] + dy * toVb];
+      clampPan3d();
+      zoomUi();
+    } else {
       viewTarget.az = drag.az - dx * 0.4;
-      if (!drag.touch) viewTarget.el = clampTo(drag.el + dy * 0.3, EL_RANGE[0], EL_RANGE[1]);
+      if (!drag.touch || isFull()) viewTarget.el = clampTo(drag.el + dy * 0.3, EL_RANGE[0], EL_RANGE[1]);
     }
     Object.assign(viewShown, { az: viewTarget.az, el: viewTarget.el, pan: [...viewTarget.pan] });
     describeView();
     redraw();
     return;
   }
-  if (drag.moved) {
+  if (drag.moved && !drag.still) {
     state.pan = [drag.pan[0] + dx, drag.pan[1] + dy];
     applyPan();
   }
 });
 const endDrag = (event) => {
+  touches.delete(event.pointerId);
+  if (pinch) {
+    if (touches.size < 2) pinch = null;
+    drag = null;
+    viewport.removeAttribute("data-dragging");
+    return;
+  }
   if (!drag || event.pointerId !== drag.id) return;
-  if (scene && !drag.moved && event.type === "pointerup" && event.button === 0) {
+  const tap = !drag.moved && event.type === "pointerup" && event.button === 0;
+  // двойное касание пальцем: свой счёт, потому что dblclick на сенсорных экранах приходит не везде
+  if (tap && event.pointerType === "touch") {
+    const now = performance.now();
+    if (lastTap && now - lastTap.t < 320 && Math.hypot(event.clientX - lastTap.x, event.clientY - lastTap.y) < 30) {
+      lastTap = null;
+      drag = null;
+      zoomToPoint(event.clientX, event.clientY, false);
+      return;
+    }
+    lastTap = { t: now, x: event.clientX, y: event.clientY };
+  }
+  if (scene && tap) {
     // нажатие без перетаскивания: деталь под указателем выбирает свой узел
     const index = scene.pick(event.clientX, event.clientY);
     const item = DATA.scene.items[index];
@@ -940,6 +1218,32 @@ document.addEventListener("keydown", (event) => {
     else turnView(event.code === "KeyQ" ? -15 : event.code === "KeyE" ? 15 : 0, event.code === "KeyW" ? 8 : event.code === "KeyS" ? -8 : 0);
     return;
   }
+  if (!isRange && (event.code === "Equal" || event.code === "NumpadAdd" || event.key === "+")) {
+    event.preventDefault();
+    touched();
+    zoomAt(1.25);
+    return;
+  }
+  if (!isRange && (event.code === "Minus" || event.code === "NumpadSubtract" || event.key === "-")) {
+    event.preventDefault();
+    touched();
+    zoomAt(0.8);
+    return;
+  }
+  if (!isRange && (event.code === "Digit0" || event.code === "Numpad0")) {
+    event.preventDefault();
+    touched();
+    resetZoom();
+    announce("Исходный масштаб");
+    return;
+  }
+  if (!isRange && event.shiftKey && isZoomed() && event.key.startsWith("Arrow")) {
+    event.preventDefault();
+    touched();
+    const step = 60;
+    panBy(event.key === "ArrowLeft" ? step : event.key === "ArrowRight" ? -step : 0, event.key === "ArrowUp" ? step : event.key === "ArrowDown" ? -step : 0);
+    return;
+  }
   if (event.code === "KeyF" && !isRange) {
     event.preventDefault();
     touched();
@@ -947,10 +1251,10 @@ document.addEventListener("keydown", (event) => {
     return;
   }
   if (event.key === "Escape") {
-    if (state.zoom !== 1) {
+    if (isZoomed()) {
       event.preventDefault();
       touched();
-      setZoom(1);
+      resetZoom();
     } else if (isFull()) {
       event.preventDefault();
       setFull(false);
@@ -983,6 +1287,8 @@ still.addEventListener?.("change", () => {
 stage.toggleAttribute("data-still", still.matches);
 
 // старт
+updateHint();
+zoomUi();
 applyFocus();
 recompute();
 render();

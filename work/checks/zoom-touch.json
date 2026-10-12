@@ -1,0 +1,17 @@
+[
+  ["wait", 6000],
+  ["click", "[data-act=\"full-icon\"]"],
+  ["wait", 1200],
+  ["eval", "(() => { const v = document.querySelector('.dc-viewport'); const b = v.getBoundingClientRect(); const cx = b.left + b.width / 2, cy = b.top + b.height / 2; const ev = (type, id, x, y) => v.dispatchEvent(new PointerEvent(type, { pointerId: id, pointerType: 'touch', isPrimary: id === 11, clientX: x, clientY: y, button: 0, buttons: type === 'pointerup' ? 0 : 1, bubbles: true, cancelable: true })); const z0 = document.querySelector('.dc-zoom-level').textContent; ev('pointerdown', 11, cx - 40, cy); ev('pointerdown', 12, cx + 40, cy); for (let i = 1; i <= 10; i++) { ev('pointermove', 11, cx - 40 - i * 8, cy); ev('pointermove', 12, cx + 40 + i * 8, cy + i * 2); } ev('pointerup', 11, cx - 120, cy); ev('pointerup', 12, cx + 120, cy + 20); return 'щипок: ' + z0 + ' → ' + document.querySelector('.dc-zoom-level').textContent + ' · азимут ' + window.__dc3d.cam.az.toFixed(1); })()"],
+  ["wait", 800],
+  ["eval", "(() => { const v = document.querySelector('.dc-viewport'); const b = v.getBoundingClientRect(); const x = b.left + b.width * 0.7, y = b.top + b.height * 0.6; const ev = (type) => v.dispatchEvent(new PointerEvent(type, { pointerId: 21, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, button: 0, buttons: type === 'pointerup' ? 0 : 1, bubbles: true, cancelable: true })); const z0 = document.querySelector('.dc-zoom-level').textContent; ev('pointerdown'); ev('pointerup'); ev('pointerdown'); ev('pointerup'); return 'двойное касание: ' + z0 + ' → ' + document.querySelector('.dc-zoom-level').textContent; })()"],
+  ["wait", 1500],
+  ["eval", "'подпись: ' + document.querySelector('[data-readout]').textContent"],
+  ["key", "Escape", ".dc-viewport"],
+  ["key", "x", ".dc-viewport", "KeyX"],
+  ["wait", 9000],
+  ["eval", "(() => { const i = window.__dcItems.indexOf('pump.motor'); const b = window.__dc3d.itemBox(i); const s = window.__dc3d.project(b.min.map((v, k) => (v + b.max[k]) / 2)); const f = window.__dc3d.frame(); const r = document.querySelector('.dc-viewport').getBoundingClientRect(); const x = r.left + s[0] / f.w * r.width, y = r.top + s[1] / f.h * r.height; document.querySelector('.dc-viewport').dispatchEvent(new MouseEvent('dblclick', { clientX: x, clientY: y, bubbles: true, cancelable: true })); return 'разобрано, двигатель насоса z=' + b.min[2].toFixed(1) + '..' + b.max[2].toFixed(1); })()"],
+  ["wait", 1800],
+  ["eval", "'подпись: ' + document.querySelector('[data-readout]').textContent"],
+  ["shot", "shots/3d/zf-exploded-motor.png", ".dc-stage", 1]
+]

@@ -1,0 +1,6 @@
+[
+  ["wait", 5000],
+  ["click", "[data-act=\"full-icon\"]"],
+  ["wait", 1500],
+  ["eval", "JSON.stringify({native: !!document.fullscreenElement, vv: [visualViewport.width, visualViewport.height, visualViewport.scale], probes: [[195, 100], [195, 420], [195, 700], [195, 830]].map(([x, y]) => { const el = document.elementFromPoint(x, y); return y + ':' + (el ? (el.closest('.dc-stage') ? 'stage' : el.className || el.tagName) : 'none'); })})"]
+]

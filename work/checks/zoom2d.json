@@ -1,0 +1,14 @@
+[
+  ["wait", 3000],
+  ["eval", "(() => { const v = document.querySelector('.dc-viewport'); const b = v.getBoundingClientRect(); const e = new WheelEvent('wheel', { deltaY: -100, clientX: b.left + b.width * 0.7, clientY: b.top + b.height * 0.6, ctrlKey: true, bubbles: true, cancelable: true }); v.dispatchEvent(e); v.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, clientX: b.left + b.width * 0.7, clientY: b.top + b.height * 0.6, ctrlKey: true, bubbles: true, cancelable: true })); return '2D Ctrl+колесо: ' + document.querySelector('.dc-zoom-level').textContent + ' · ' + document.querySelector('.dc-zoomer').style.transform; })()"],
+  ["key", "f", ".dc-viewport", "KeyF"],
+  ["wait", 1200],
+  ["eval", "(() => { const v = document.querySelector('.dc-viewport'); const b = v.getBoundingClientRect(); v.dispatchEvent(new MouseEvent('dblclick', { clientX: b.left + b.width * 0.3, clientY: b.top + b.height * 0.4, bubbles: true, cancelable: true })); const s = document.querySelector('.dc-zoomer > svg').getBoundingClientRect(); return '2D во весь экран, двойной клик: ' + document.querySelector('.dc-zoom-level').textContent + ' · подсказка ' + document.querySelector('[data-hint]').textContent + ' · svg ' + Math.round(s.width) + '×' + Math.round(s.height) + ' · кнопка сдвига видна ' + (getComputedStyle(document.querySelector('[data-act=pan-mode]')).display !== 'none'); })()"],
+  ["drag", ".dc-viewport", 0.5, 0.5, 0.35, 0.4],
+  ["wait", 400],
+  ["shot", "shots/3d/zf-2d.png", ".dc-stage", 1],
+  ["key", "Escape", ".dc-viewport"],
+  ["key", "Escape", ".dc-viewport"],
+  ["wait", 600],
+  ["eval", "'2D выход: ' + document.querySelector('.dc-zoom-level').textContent + ' · full ' + document.querySelector('.dc-stage').hasAttribute('data-full') + ' · transform «' + document.querySelector('.dc-zoomer').style.transform + '»'"]
+]
